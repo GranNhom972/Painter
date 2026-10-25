@@ -1,0 +1,22 @@
+{
+  "name": "paint",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Paint: Rust + WebAssembly raster editor (Tauri desktop app)",
+  "type": "module",
+  "scripts": {
+    "build:wasm": "wasm-pack build crates/paint-wasm --target web --release --out-dir ../../ui/pkg --no-typescript",
+    "serve": "node scripts/serve.mjs",
+    "test:rust": "cargo test --workspace",
+    "test:wasm": "wasm-pack test --node crates/paint-wasm",
+    "test:e2e": "playwright test",
+    "test": "npm run test:rust && npm run test:wasm && npm run build:wasm && npm run test:e2e",
+    "tauri": "tauri",
+    "dev": "npm run build:wasm && tauri dev",
+    "build": "npm run build:wasm && tauri build"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@tauri-apps/cli": "2.12.4"
+  }
+}

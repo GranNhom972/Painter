@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name={{name}}
+GenericName=Image editor
+GenericName[fr]=Éditeur d'images
+Comment=Draw and edit pictures
+Comment[fr]=Dessiner et retoucher des images
+Exec={{exec}} %F
+Icon={{icon}}
+StartupWMClass={{exec}}
+Terminal=false
+Categories=Graphics;2DGraphics;RasterGraphics;
+Keywords=paint;draw;drawing;image;picture;dessin;peinture;
+MimeType=image/png;image/jpeg;image/bmp;image/gif;image/tiff;image/webp;image/x-icon;

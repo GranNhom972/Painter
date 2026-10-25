@@ -1,0 +1,6 @@
+/target/
+/node_modules/
+/ui/pkg/
+/test-results/
+/playwright-report/
+/src-tauri/gen/

@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = ["crates/paint-core", "crates/paint-wasm", "src-tauri"]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+authors = ["Paint contributors"]
+
+[workspace.dependencies]
+paint-core = { path = "crates/paint-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif", "ico", "tiff", "webp"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+# The engine is CPU heavy (per-pixel loops): keep tests and dev builds fast.
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev]
+opt-level = 1

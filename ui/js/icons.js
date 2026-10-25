@@ -1,0 +1,67 @@
+// Line icons in the spirit of Fluent UI (20x20, stroke = currentColor).
+
+const P = (d, extra = '') => `<svg viewBox="0 0 20 20" class="ico" aria-hidden="true" ${extra}>${d}</svg>`;
+const s = (d) => `<path d="${d}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>`;
+const f = (d) => `<path d="${d}" fill="currentColor"/>`;
+
+export const icons = {
+  save: P(s('M4 3h9.5L16.5 6v10.5a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5v-13A.5.5 0 0 1 4 3z') + s('M6.5 3v4h6V3M6 17v-5.5h8V17')),
+  undo: P(s('M7.5 4.5 4 8l3.5 3.5M4 8h8a4 4 0 0 1 0 8H9')),
+  redo: P(s('M12.5 4.5 16 8l-3.5 3.5M16 8H8a4 4 0 0 0 0 8h3')),
+  gear: P(s('M10 12.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2z') + s('M8.6 2.8h2.8l.4 2 1.4.8 1.9-.7 1.4 2.4-1.5 1.4v1.6l1.5 1.4-1.4 2.4-1.9-.7-1.4.8-.4 2H8.6l-.4-2-1.4-.8-1.9.7-1.4-2.4L5 10.8V9.2L3.5 7.8l1.4-2.4 1.9.7 1.4-.8z')),
+  chevron: `<svg viewBox="0 0 10 10" class="chev" aria-hidden="true"><path d="M2.5 3.8 5 6.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  selectRect: P(s('M3 6V3h3M8.5 3h3M14 3h3v3M17 8.5v3M17 14v3h-3M11.5 17h-3M6 17H3v-3M3 11.5v-3')),
+  selectFree: P(s('M5 6.5C6 3.5 10.5 2.5 13.5 4s3.5 5 1.5 7.5-6 2-7.5 4.5' ) .replace('stroke-linejoin="round"', 'stroke-linejoin="round" stroke-dasharray="2 2"') + s('M7.5 16.5 6 18')),
+  selectAll: P(s('M3 6V3h3M14 3h3v3M17 14v3h-3M6 17H3v-3') + '<rect x="6" y="6" width="8" height="8" rx="1" fill="currentColor" opacity=".35"/>'),
+  invert: P(s('M3 3h14v14H3z').replace('stroke-linejoin="round"', 'stroke-linejoin="round" stroke-dasharray="2 2"') + '<rect x="6.5" y="6.5" width="7" height="7" fill="currentColor" opacity=".35"/>'),
+  trash: P(s('M4 5.5h12M8 5.5V4h4v1.5M5.5 5.5l.8 11h7.4l.8-11M8.5 8.5v5.5M11.5 8.5v5.5')),
+  transparent: P('<rect x="3" y="3" width="14" height="14" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>' + f('M3.6 3.6h3.5v3.5H3.6zM10.1 3.6h3.5v3.5h-3.5zM6.9 7.1h3.5v3.5H6.9zM13.4 7.1h3v3.5h-3zM3.6 10.6h3.3v3.5H3.6zM10.1 10.6h3.5v3.5h-3.5zM6.9 14.1h3.3v2.3H6.9zM13.4 14.1h3v2.3h-3z')),
+  crop: P(s('M5.5 2.5v11a1 1 0 0 0 1 1h11M2.5 5.5h11a1 1 0 0 1 1 1v11')),
+  resize: P(s('M3 8V3.5a.5.5 0 0 1 .5-.5H8M17 12v4.5a.5.5 0 0 1-.5.5H12M3 3l6 6M17 17l-6-6') + '<rect x="9" y="3" width="8" height="5" rx=".5" fill="none" stroke="currentColor" stroke-width="1.1" opacity=".55"/>'),
+  rotate: P(s('M15.5 9A5.5 5.5 0 1 0 14 13.3M15.5 4.5V9H11')),
+  rotateLeft: P(s('M4.5 9A5.5 5.5 0 1 1 6 13.3M4.5 4.5V9H9')),
+  rotate180: P(s('M4 10a6 6 0 0 1 12 0M16 10l-2.2-2M16 10l2-2.2')),
+  flip: P(s('M10 2.5v15') + s('M8 5 3 14.5h5zM12 5l5 9.5h-5z')),
+  flipV: P(s('M2.5 10h15') + s('M5 8l9.5-5V8zM5 12l9.5 5v-5z')),
+  removeBg: P(s('M3 3h14v14H3z').replace('stroke-linejoin="round"', 'stroke-linejoin="round" stroke-dasharray="2 1.6"') + f('M10 5.5a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4zM5.5 15.5c.6-2.6 2.4-4 4.5-4s3.9 1.4 4.5 4z')),
+  pencil: P(s('M13.2 3.3a1.8 1.8 0 0 1 2.5 2.5L6.5 15 3 16.9 5 13.5z') + s('M12 4.5 15.5 8')),
+  fill: P(s('M9 3.5 15.5 10l-5.3 5.3a1.4 1.4 0 0 1-2 0L3.7 10.8a1.4 1.4 0 0 1 0-2L9 3.5zM6.5 2 9 4.5M4 10h11.3') + f('M16.8 12.5s1.7 2.2 1.7 3.2a1.7 1.7 0 0 1-3.4 0c0-1 1.7-3.2 1.7-3.2z')),
+  text: P(s('M4 16 9.3 3.5h1.4L16 16M6.2 11.5h7.6')),
+  eraser: P(s('M11.5 3.5 17 9l-7 7H6.5L3 12.5zM7.5 7.5l5.5 5.5M6.5 16H17')),
+  picker: P(s('M13.5 3.2a2 2 0 0 1 2.8 2.8l-2 2-2.8-2.8zM12.2 6.4l-7 7L4 16l2.6-1.2 7-7M10 4.2l5.8 5.8')),
+  magnifier: P(s('M8.5 3.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zM12.2 12.2 16.5 16.5M6.5 8.5h4M8.5 6.5v4')),
+  brush: P(s('M16.5 3.5c-1 1.5-5.6 6.4-7.2 7.6L8 9.8C9.1 8.2 14 3.6 15.5 2.6c.5-.3 1.3.4 1 .9z') + s('M8 9.8c-1.6-.3-3 .6-3.2 2.4-.2 1.3-.7 2.2-1.8 2.6 3.6 1.6 7.1.2 7-2.3z')),
+  shapes: P(s('M7.5 2.8a4.7 4.7 0 1 1 0 9.4 4.7 4.7 0 0 1 0-9.4z') + '<rect x="9" y="9" width="8.5" height="8.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>'),
+  outline: P('<rect x="3.5" y="3.5" width="13" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+  fillStyle: P('<rect x="3.5" y="3.5" width="13" height="13" rx="1.5" fill="currentColor" opacity=".5" stroke="currentColor" stroke-width="1.2"/>'),
+  size: P('<path d="M3 4.5h14" stroke="currentColor" stroke-width="1"/><path d="M3 8.5h14" stroke="currentColor" stroke-width="2"/><path d="M3 13.5h14" stroke="currentColor" stroke-width="3.2"/>'),
+  layers: P(s('M10 3 17 6.8 10 10.6 3 6.8zM3 10.2l7 3.8 7-3.8M3 13.6l7 3.8 7-3.8')),
+  pointer: P(s('M5 3v12.5l3.4-3.2 2.2 4.7 2-1-2.2-4.6H15z')),
+  selSize: P(s('M3 6V3h3M14 3h3v3M17 14v3h-3M6 17H3v-3')),
+  canvasSize: P(s('M4 3v14M16 3v14M3 4h14M3 16h14').replace('stroke-linecap="round"', 'stroke-linecap="round" opacity=".9"')),
+  disk: P(s('M4 3h9.5L16.5 6v10.5a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5v-13A.5.5 0 0 1 4 3zM6.5 17v-5h7v5')),
+  fit: P(s('M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4') + '<rect x="6.5" y="6.5" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>'),
+  zoomOut: P(s('M8.5 3.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zM12.2 12.2 16.5 16.5M6.5 8.5h4')),
+  zoomIn: P(s('M8.5 3.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zM12.2 12.2 16.5 16.5M6.5 8.5h4M8.5 6.5v4')),
+  plus: P(s('M10 4v12M4 10h12')),
+  eye: P(s('M2.5 10s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5-7.5-5-7.5-5z') + s('M10 7.8a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z')),
+  eyeOff: P(s('M3 3l14 14M8 5.3A7.7 7.7 0 0 1 10 5c4.7 0 7.5 5 7.5 5a12 12 0 0 1-2 2.5M12.5 14.4A7 7 0 0 1 10 15c-4.7 0-7.5-5-7.5-5a12.5 12.5 0 0 1 3.1-3.5')),
+  duplicate: P('<rect x="6.5" y="6.5" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>' + s('M13.5 4.5v-.5A1 1 0 0 0 12.5 3H4a1 1 0 0 0-1 1v8.5a1 1 0 0 0 1 1h.5')),
+  mergeDown: P(s('M10 3v9M6.5 8.5 10 12l3.5-3.5M3.5 16.5h13')),
+  up: P(s('M10 16V4M5.5 8.5 10 4l4.5 4.5')),
+  down: P(s('M10 4v12M5.5 11.5 10 16l4.5-4.5')),
+  close: P(s('M5 5l10 10M15 5 5 15')),
+  check: P(s('M4.5 10.5 8 14l7.5-8')),
+  copy: P('<rect x="6.5" y="6.5" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>' + s('M13.5 4.5v-.5A1 1 0 0 0 12.5 3H4a1 1 0 0 0-1 1v8.5a1 1 0 0 0 1 1h.5')),
+  cut: P(s('M6 13.5a2.2 2.2 0 1 0 0 .1zM14 13.5a2.2 2.2 0 1 0 0 .1zM7.6 12 14 3M12.4 12 6 3')),
+  paste: P(s('M7 4H5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1h-2M7.5 2.8h5v2.4h-5z')),
+  bold: P(f('M5.5 3.5h5a3.2 3.2 0 0 1 2 5.7 3.4 3.4 0 0 1-1.6 6.3H5.5zM7.8 5.5v3.4h2.6a1.7 1.7 0 0 0 0-3.4zm0 5.3v2.8h3a1.4 1.4 0 0 0 0-2.8z')),
+  italic: P(s('M8.5 3.5h6M5.5 16.5h6M11.5 3.5l-3 13')),
+  underline: P(s('M6 3.5V9a4 4 0 0 0 8 0V3.5M5 17h10')),
+  strike: P(s('M3.5 10h13M13.5 5.5C13 4.3 11.7 3.5 10 3.5c-2.2 0-3.6 1.2-3.6 2.8 0 1 .5 1.8 1.6 2.4M6.3 14c.5 1.4 1.9 2.5 3.9 2.5 2.4 0 3.8-1.3 3.8-3 0-.6-.1-1.1-.4-1.5')),
+  textBg: P('<rect x="3" y="4" width="14" height="12" rx="1.5" fill="currentColor" opacity=".3"/>' + s('M6.5 13.5 10 6l3.5 7.5M7.6 11.2h4.8')),
+};
+
+export function icon(name) {
+  return icons[name] || '';
+}

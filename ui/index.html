@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Paint</title>
+  <link rel="icon" href="icons/paint.svg">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app" class="app">
+
+  <!-- Menu bar: File / Edit / View, quick access, settings -->
+  <header class="menubar">
+    <nav class="menus" role="menubar">
+      <button class="menu-btn" data-menu="file" data-testid="menu-file" data-i18n="menu.file">Fichier</button>
+      <button class="menu-btn" data-menu="edit" data-testid="menu-edit" data-i18n="menu.edit">Édition</button>
+      <button class="menu-btn" data-menu="view" data-testid="menu-view" data-i18n="menu.view">Affichage</button>
+    </nav>
+    <span class="vsep"></span>
+    <button class="icon-btn" data-cmd="file.save" data-icon="save" data-i18n-title="file.save" data-shortcut="Ctrl+S" data-testid="qa-save"></button>
+    <button class="icon-btn" data-cmd="edit.undo" data-icon="undo" data-i18n-title="edit.undo" data-shortcut="Ctrl+Z" data-testid="qa-undo"></button>
+    <button class="icon-btn" data-cmd="edit.redo" data-icon="redo" data-i18n-title="edit.redo" data-shortcut="Ctrl+Y" data-testid="qa-redo"></button>
+    <span class="spacer"></span>
+    <button class="icon-btn" data-menu="settings" data-icon="gear" data-i18n-title="settings.title" data-testid="menu-settings"></button>
+  </header>
+
+  <!-- Ribbon -->
+  <section class="ribbon" data-testid="ribbon">
+    <div class="group" data-group="selection">
+      <div class="group-body">
+        <button class="big-btn split" data-tool="select" data-menu="selection" data-testid="btn-selection" data-i18n-title="group.selection">
+          <span class="big-ico" data-icon="selectRect" id="selectionIcon"></span><span data-icon="chevron"></span>
+        </button>
+      </div>
+      <div class="group-label" data-i18n="group.selection">Sélection</div>
+    </div>
+
+    <div class="group" data-group="image">
+      <div class="group-body grid-2">
+        <button class="tool-btn" data-cmd="image.crop" data-icon="crop" data-i18n-title="image.crop" data-testid="btn-crop"></button>
+        <button class="tool-btn split" data-menu="rotate" data-i18n-title="image.rotate" data-testid="btn-rotate"><span data-icon="rotate"></span><span data-icon="chevron"></span></button>
+        <button class="tool-btn" data-cmd="image.resize" data-icon="resize" data-i18n-title="image.resize" data-shortcut="Ctrl+W" data-testid="btn-resize"></button>
+        <button class="tool-btn split" data-menu="flip" data-i18n-title="image.flip" data-testid="btn-flip"><span data-icon="flip"></span><span data-icon="chevron"></span></button>
+        <button class="big-btn" data-cmd="image.removeBg" data-i18n-title="image.removeBg" data-testid="btn-remove-bg"><span class="big-ico" data-icon="removeBg"></span></button>
+      </div>
+      <div class="group-label" data-i18n="group.image">Image</div>
+    </div>
+
+    <div class="group" data-group="tools">
+      <div class="group-body grid-3">
+        <button class="tool-btn" data-tool="pencil" data-icon="pencil" data-i18n-title="tool.pencil" data-testid="tool-pencil"></button>
+        <button class="tool-btn" data-tool="fill" data-icon="fill" data-i18n-title="tool.fill" data-testid="tool-fill"></button>
+        <button class="tool-btn" data-tool="text" data-icon="text" data-i18n-title="tool.text" data-testid="tool-text"></button>
+        <button class="tool-btn" data-tool="eraser" data-icon="eraser" data-i18n-title="tool.eraser" data-testid="tool-eraser"></button>
+        <button class="tool-btn" data-tool="picker" data-icon="picker" data-i18n-title="tool.picker" data-testid="tool-picker"></button>
+        <button class="tool-btn" data-tool="magnifier" data-icon="magnifier" data-i18n-title="tool.magnifier" data-testid="tool-magnifier"></button>
+      </div>
+      <div class="group-label" data-i18n="group.tools">Outils</div>
+    </div>
+
+    <div class="group" data-group="brushes">
+      <div class="group-body">
+        <button class="big-btn split" data-tool="brush" data-menu="brushes" data-testid="btn-brushes" data-i18n-title="group.brushes">
+          <span class="big-ico" data-icon="brush"></span><span data-icon="chevron"></span>
+        </button>
+      </div>
+      <div class="group-label" data-i18n="group.brushes">Pinceaux</div>
+    </div>
+
+    <div class="group" data-group="shapes">
+      <div class="group-body">
+        <button class="big-btn split" data-tool="shape" data-menu="shapes" data-testid="btn-shapes" data-i18n-title="group.shapes">
+          <span class="big-ico" data-icon="shapes"></span><span data-icon="chevron"></span>
+        </button>
+      </div>
+      <div class="group-label" data-i18n="group.shapes">Formes</div>
+    </div>
+
+    <div class="group" data-group="size">
+      <div class="group-body">
+        <button class="big-btn split" data-menu="size" data-testid="btn-size" data-i18n-title="group.size">
+          <span class="big-ico" data-icon="size"></span><span data-icon="chevron"></span>
+        </button>
+      </div>
+      <div class="group-label" data-i18n="group.size">Taille</div>
+    </div>
+
+    <div class="group colors-group" data-group="colors">
+      <div class="group-body colors">
+        <div class="active-colors">
+          <button class="active-color selected" data-color-slot="1" data-testid="color1" data-i18n-title="color.1"><span class="swatch"></span></button>
+          <button class="active-color" data-color-slot="2" data-testid="color2" data-i18n-title="color.2"><span class="swatch"></span></button>
+        </div>
+        <div class="palette" id="palette" data-testid="palette"></div>
+        <button class="edit-colors" data-cmd="color.edit" data-testid="btn-edit-colors" data-i18n-title="color.edit"><span class="rainbow"></span></button>
+      </div>
+      <div class="group-label" data-i18n="group.colors">Couleurs</div>
+    </div>
+
+    <div class="group" data-group="layers">
+      <div class="group-body">
+        <button class="big-btn" data-cmd="layers.toggle" data-testid="btn-layers" data-i18n-title="group.layers"><span class="big-ico" data-icon="layers"></span></button>
+      </div>
+      <div class="group-label" data-i18n="group.layers">Calques</div>
+    </div>
+  </section>
+
+  <!-- Contextual text toolbar (text tool) -->
+  <section class="text-bar" id="textBar" hidden data-testid="text-bar">
+    <label><span data-i18n="text.font">Police</span>
+      <select id="textFont" data-testid="text-font"></select></label>
+    <label><span data-i18n="text.size">Taille</span>
+      <input id="textSize" type="number" min="6" max="400" value="24" data-testid="text-size"></label>
+    <button class="toggle-btn" id="textBold" data-icon="bold" data-i18n-title="text.bold" data-testid="text-bold"></button>
+    <button class="toggle-btn" id="textItalic" data-icon="italic" data-i18n-title="text.italic" data-testid="text-italic"></button>
+    <button class="toggle-btn" id="textUnderline" data-icon="underline" data-i18n-title="text.underline" data-testid="text-underline"></button>
+    <button class="toggle-btn" id="textStrike" data-icon="strike" data-i18n-title="text.strike" data-testid="text-strike"></button>
+    <button class="toggle-btn" id="textOpaque" data-icon="textBg" data-i18n-title="text.background" data-testid="text-opaque"></button>
+    <button class="pill-btn" id="textApply" data-testid="text-apply"><span data-icon="check"></span><span data-i18n="text.done">Valider le texte</span></button>
+  </section>
+
+  <main class="workspace">
+    <div class="ruler-corner" id="rulerCorner" hidden></div>
+    <canvas class="ruler ruler-h" id="rulerH" hidden></canvas>
+    <canvas class="ruler ruler-v" id="rulerV" hidden></canvas>
+    <div class="view-wrap" id="viewWrap">
+    <div class="viewport" id="viewport" data-testid="viewport" tabindex="-1">
+      <div class="scroller" id="scroller">
+        <div class="canvas-frame" id="canvasFrame">
+          <canvas id="canvas" data-testid="canvas"></canvas>
+          <textarea id="textBox" class="text-box" hidden spellcheck="false" wrap="off" data-testid="text-box"></textarea>
+          <div class="canvas-handle" data-h="nw"></div>
+          <div class="canvas-handle" data-h="n"></div>
+          <div class="canvas-handle" data-h="ne"></div>
+          <div class="canvas-handle" data-h="e" data-testid="canvas-handle-e"></div>
+          <div class="canvas-handle" data-h="se" data-testid="canvas-handle-se"></div>
+          <div class="canvas-handle" data-h="s" data-testid="canvas-handle-s"></div>
+          <div class="canvas-handle" data-h="sw"></div>
+          <div class="canvas-handle" data-h="w" data-testid="canvas-handle-w"></div>
+        </div>
+      </div>
+    </div>
+    <canvas class="overlay" id="overlay"></canvas>
+    </div>
+    <aside class="layers-panel" id="layersPanel" hidden data-testid="layers-panel">
+      <div class="panel-head">
+        <span data-i18n="layers.title">Calques</span>
+        <button class="icon-btn" data-cmd="layers.add" data-icon="plus" data-i18n-title="layers.add" data-testid="layer-add"></button>
+      </div>
+      <ol class="layer-list" id="layerList" data-testid="layer-list"></ol>
+      <div class="panel-foot">
+        <button class="icon-btn" data-cmd="layers.up" data-icon="up" data-i18n-title="layers.up" data-testid="layer-up"></button>
+        <button class="icon-btn" data-cmd="layers.down" data-icon="down" data-i18n-title="layers.down" data-testid="layer-down"></button>
+        <button class="icon-btn" data-cmd="layers.duplicate" data-icon="duplicate" data-i18n-title="layers.duplicate" data-testid="layer-duplicate"></button>
+        <button class="icon-btn" data-cmd="layers.merge" data-icon="mergeDown" data-i18n-title="layers.merge" data-testid="layer-merge"></button>
+        <button class="icon-btn" data-cmd="layers.delete" data-icon="trash" data-i18n-title="layers.delete" data-testid="layer-delete"></button>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar" id="statusbar" data-testid="statusbar">
+    <span class="stat"><span data-icon="pointer"></span><span id="statPos" data-testid="stat-pos"></span></span>
+    <span class="stat"><span data-icon="selSize"></span><span id="statSel" data-testid="stat-sel"></span></span>
+    <span class="stat"><span data-icon="canvasSize"></span><span id="statCanvas" data-testid="stat-canvas"></span></span>
+    <span class="stat"><span data-icon="disk"></span><span id="statFile" data-testid="stat-file"></span></span>
+    <span class="spacer"></span>
+    <button class="icon-btn small" data-cmd="view.fit" data-icon="fit" data-i18n-title="view.fit" data-testid="zoom-fit"></button>
+    <button class="zoom-value" data-menu="zoom" id="zoomValue" data-testid="zoom-value">100%</button>
+    <button class="icon-btn small" data-cmd="view.zoomOut" data-icon="zoomOut" data-i18n-title="view.zoomOut" data-testid="zoom-out"></button>
+    <input type="range" id="zoomSlider" class="zoom-slider" min="0" max="1000" value="500" data-testid="zoom-slider" aria-label="Zoom">
+    <button class="icon-btn small" data-cmd="view.zoomIn" data-icon="zoomIn" data-i18n-title="view.zoomIn" data-testid="zoom-in"></button>
+  </footer>
+
+  <!-- Popup menus are built by ui/js/menus.js into this layer -->
+  <div class="popup-layer" id="popupLayer"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</div>
+
+<!-- Dialogs -->
+<dialog id="dlgResize" class="dlg" data-testid="dlg-resize">
+  <form method="dialog">
+    <h2 data-i18n="dlg.resize.title">Redimensionner et incliner</h2>
+    <fieldset>
+      <legend data-i18n="dlg.resize.resize">Redimensionner</legend>
+      <div class="row"><span data-i18n="dlg.resize.by">Par :</span>
+        <label><input type="radio" name="unit" value="percent" checked data-testid="resize-percent"> <span data-i18n="dlg.resize.percent">Pourcentage</span></label>
+        <label><input type="radio" name="unit" value="pixels" data-testid="resize-pixels"> <span data-i18n="dlg.resize.pixels">Pixels</span></label>
+      </div>
+      <label class="row"><span data-i18n="dlg.resize.horizontal">Horizontalement :</span><input type="number" name="rw" min="1" value="100" data-testid="resize-w"></label>
+      <label class="row"><span data-i18n="dlg.resize.vertical">Verticalement :</span><input type="number" name="rh" min="1" value="100" data-testid="resize-h"></label>
+      <label class="row check"><input type="checkbox" name="keep" checked data-testid="resize-keep"> <span data-i18n="dlg.resize.keep">Conserver les proportions</span></label>
+    </fieldset>
+    <fieldset>
+      <legend data-i18n="dlg.resize.skew">Incliner (degrés)</legend>
+      <label class="row"><span data-i18n="dlg.resize.horizontal">Horizontalement :</span><input type="number" name="sx" min="-89" max="89" value="0" data-testid="skew-x"></label>
+      <label class="row"><span data-i18n="dlg.resize.vertical">Verticalement :</span><input type="number" name="sy" min="-89" max="89" value="0" data-testid="skew-y"></label>
+    </fieldset>
+    <div class="dlg-actions">
+      <button value="ok" class="primary" data-i18n="dlg.ok" data-testid="dlg-ok">OK</button>
+      <button value="cancel" data-i18n="dlg.cancel" data-testid="dlg-cancel">Annuler</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgProps" class="dlg" data-testid="dlg-props">
+  <form method="dialog">
+    <h2 data-i18n="dlg.props.title">Propriétés de l'image</h2>
+    <label class="row"><span data-i18n="dlg.props.width">Largeur :</span><input type="number" name="w" min="1" max="16384" data-testid="props-w"><span data-i18n="dlg.props.units">pixels</span></label>
+    <label class="row"><span data-i18n="dlg.props.height">Hauteur :</span><input type="number" name="h" min="1" max="16384" data-testid="props-h"><span data-i18n="dlg.props.units">pixels</span></label>
+    <div class="dlg-actions">
+      <button value="ok" class="primary" data-i18n="dlg.ok" data-testid="dlg-ok">OK</button>
+      <button value="cancel" data-i18n="dlg.cancel" data-testid="dlg-cancel">Annuler</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgColors" class="dlg" data-testid="dlg-colors">
+  <form method="dialog">
+    <h2 data-i18n="dlg.colors.title">Modifier les couleurs</h2>
+    <div class="color-editor">
+      <div class="sv" id="svArea" data-testid="color-sv"><div class="sv-thumb" id="svThumb"></div></div>
+      <input type="range" id="hueSlider" class="hue" min="0" max="359" value="0" data-testid="color-hue" aria-label="Hue">
+      <div class="color-fields">
+        <div class="preview" id="colorPreview" data-testid="color-preview"></div>
+        <label><span data-i18n="dlg.colors.hex">Hex</span><input id="hexInput" maxlength="7" data-testid="color-hex"></label>
+        <label><span data-i18n="dlg.colors.red">Rouge</span><input id="rInput" type="number" min="0" max="255" data-testid="color-r"></label>
+        <label><span data-i18n="dlg.colors.green">Vert</span><input id="gInput" type="number" min="0" max="255" data-testid="color-g"></label>
+        <label><span data-i18n="dlg.colors.blue">Bleu</span><input id="bInput" type="number" min="0" max="255" data-testid="color-b"></label>
+      </div>
+    </div>
+    <div class="dlg-actions">
+      <button value="ok" class="primary" data-i18n="dlg.colors.done" data-testid="dlg-ok">Terminé</button>
+      <button value="cancel" data-i18n="dlg.cancel" data-testid="dlg-cancel">Annuler</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgConfirm" class="dlg" data-testid="dlg-confirm">
+  <form method="dialog">
+    <h2 id="confirmTitle"></h2>
+    <p id="confirmBody"></p>
+    <div class="dlg-actions">
+      <button value="save" class="primary" data-i18n="dlg.save.save" data-testid="confirm-save">Enregistrer</button>
+      <button value="discard" data-i18n="dlg.save.discard" data-testid="confirm-discard">Ne pas enregistrer</button>
+      <button value="cancel" data-i18n="dlg.cancel" data-testid="confirm-cancel">Annuler</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgMessage" class="dlg" data-testid="dlg-message">
+  <form method="dialog">
+    <h2 id="messageTitle"></h2>
+    <p id="messageBody"></p>
+    <div class="dlg-actions"><button value="ok" class="primary" data-i18n="dlg.ok" data-testid="dlg-ok">OK</button></div>
+  </form>
+</dialog>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

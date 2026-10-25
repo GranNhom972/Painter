@@ -1,0 +1,41 @@
+[package]
+name = "paint"
+description = "Paint: raster image editor (Rust + WebAssembly)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+default-run = "paint"
+
+[lib]
+name = "paint_app"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "paint"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+paint-core.workspace = true
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde_json.workspace = true
+
+# Linux: the GTK clipboard of the window itself (X11 and Wayland).
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+
+# Windows / macOS: arboard.
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+arboard = { version = "3", default-features = false, features = ["image-data"] }
+
+[dev-dependencies]
+tempfile = "3"
+# Plays "another application" in the clipboard tests.
+arboard = { version = "3", default-features = false, features = ["image-data"] }
+
+[[test]]
+name = "gtk_clipboard"
+harness = false
