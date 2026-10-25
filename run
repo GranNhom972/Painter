@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# Lanceur de Paint.
+#
+#   ./run --web [--port N] [--host H] [--no-open]   version web dans le navigateur
+#   ./run --linux [--release] [-- FICHIER]          application de bureau (Linux)
+#   ./run --package                                 paquets .deb, .rpm et AppImage
+#   ./run --web-build [DOSSIER]                     site web statique (défaut : dist/web)
+#   ./run --test                                    toutes les suites de tests
+#   ./run --help
+set -euo pipefail
+cd "$(dirname "$0")"
+
+bold() { printf '\033[1m%s\033[0m\n' "$*"; }
+die() { printf 'Erreur : %s\n' "$*" >&2; exit 1; }
+usage() { sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; }
+
+need() { command -v "$1" >/dev/null 2>&1 || die "$1 est introuvable. $2"; }
+
+prepare_common() {
+  need cargo "Installez Rust : https://rustup.rs"
+  need node "Installez Node.js 18 ou plus récent."
+  rustup target list --installed 2>/dev/null | grep -q wasm32-unknown-unknown || rustup target add wasm32-unknown-unknown
+  command -v wasm-pack >/dev/null || cargo install wasm-pack --locked
+  [ -d node_modules ] || npm install --no-audit --no-fund
+}
+
+build_wasm() {
+  bold "Compilation du moteur en WebAssembly…"
+  npm run --silent build:wasm >/dev/null 2>&1 || npm run build:wasm
+}
+
+webkit_headers() {
+  if ! pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
+    bold "En-têtes WebKitGTK absents : récupération locale (sans sudo)…"
+    export PKG_CONFIG_PATH="$(scripts/linux-devlibs.sh)${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  fi
+}
+
+open_url() {
+  local url="$1"
+  if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    (command -v xdg-open >/dev/null && xdg-open "$url" >/dev/null 2>&1 &) || true
+  fi
+}
+
+mode="${1:-}"
+[ $# -gt 0 ] && shift
+case "$mode" in
+  --web)
+    port=4173 host=127.0.0.1 open=1
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --port) port="$2"; shift 2 ;;
+        --host) host="$2"; shift 2 ;;
+        --no-open) open=0; shift ;;
+        *) die "option inconnue : $1" ;;
+      esac
+    done
+    prepare_common
+    build_wasm
+    url="http://$([ "$host" = 0.0.0.0 ] && echo localhost || echo "$host"):$port/"
+    bold "Paint (version web) : $url   (Ctrl+C pour arrêter)"
+    [ "$open" = 1 ] && (sleep 1; open_url "$url") &
+    PORT="$port" HOST="$host" exec node scripts/serve.mjs
+    ;;
+  --linux)
+    [ "$(uname -s)" = Linux ] || die "--linux fonctionne uniquement sous Linux."
+    profile=() args=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --release) profile=(--release); shift ;;
+        --) shift; args=("$@"); break ;;
+        *) args+=("$1"); shift ;;
+      esac
+    done
+    prepare_common
+    webkit_headers
+    build_wasm
+    bold "Compilation et lancement de l'application de bureau…"
+    exec cargo run -q -p paint "${profile[@]}" -- "${args[@]}"
+    ;;
+  --package)
+    exec scripts/build-linux.sh "$@"
+    ;;
+  --web-build)
+    dest="${1:-dist/web}"
+    prepare_common
+    build_wasm
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    cp -r ui/. "$dest"/
+    rm -f "$dest"/pkg/.gitignore "$dest"/pkg/package.json
+    bold "Site statique prêt dans $dest (à servir en HTTP, le fichier .wasm en application/wasm)."
+    ;;
+  --test)
+    prepare_common
+    webkit_headers
+    bold "1/4 Moteur Rust" && cargo test -p paint-core
+    bold "2/4 Moteur en WebAssembly" && npm run test:wasm
+    build_wasm
+    bold "3/4 Interface (navigateur)" && npx playwright test
+    bold "4/4 Bureau (natif)" && cargo test -p paint
+    if command -v tauri-driver >/dev/null && { [ -n "${DISPLAY:-}" ] || command -v Xvfb >/dev/null; }; then
+      bold "Bonus : tests WebDriver de l'application de bureau" && scripts/test-desktop.sh
+    fi
+    ;;
+  -h|--help|"")
+    usage
+    ;;
+  *)
+    usage
+    die "mode inconnu : $mode"
+    ;;
+esac

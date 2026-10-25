@@ -34,6 +34,10 @@ export async function resizeDialog(base) {
       if (from === 'w') f.rh.value = pct ? f.rw.value : Math.max(1, Math.round((f.rw.value * base.h) / base.w));
       else f.rw.value = pct ? f.rh.value : Math.max(1, Math.round((f.rh.value * base.w) / base.h));
     };
+    setTimeout(() => {
+      f.rw.focus();
+      f.rw.select();
+    });
     f.rw.oninput = () => sync('w');
     f.rh.oninput = () => sync('h');
     for (const r of form.querySelectorAll('input[name=unit]')) {
@@ -156,8 +160,13 @@ export async function colorDialog(initial) {
     const rgb = hexToRgb(hexIn.value);
     if (rgb && hexIn.value.replace('#', '').length === 6) fromRgb(...rgb, 'hex');
   };
+  const channel = (el) => Math.min(255, Math.max(0, Math.round(+el.value || 0)));
   for (const el of [rIn, gIn, bIn]) {
-    el.oninput = () => fromRgb(+rIn.value || 0, +gIn.value || 0, +bIn.value || 0, 'rgb');
+    el.oninput = () => fromRgb(channel(rIn), channel(gIn), channel(bIn), 'rgb');
+    // Out-of-range values snap back when the field is left.
+    el.onchange = () => {
+      el.value = channel(el);
+    };
   }
   const value = await run(dlg, () => paint());
   return value === 'ok' ? current : null;

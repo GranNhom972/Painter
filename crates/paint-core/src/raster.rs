@@ -30,10 +30,22 @@ pub fn stamp_capsule(mask: &mut Mask, a: Pt, b: Pt, radius: f32, strength: f32) 
     let r = radius.max(0.5);
     let bounds = IRect::from_bounds(a.x.min(b.x) - r - 1.0, a.y.min(b.y) - r - 1.0, a.x.max(b.x) + r + 1.0, a.y.max(b.y) + r + 1.0)
         .clamp_to(mask.width(), mask.height());
+    let d = b - a;
+    let len = d.len();
     for y in bounds.y..bounds.bottom() {
-        for x in bounds.x..bounds.right() {
-            let d = dist_to_segment(Pt::new(x as f32 + 0.5, y as f32 + 0.5), a, b);
-            let cov = (r + 0.5 - d).clamp(0.0, 1.0) * strength;
+        // For steep segments only scan the band around the line on this row,
+        // instead of the whole bounding box.
+        let (x0, x1) = if len > 0.0 && d.y.abs() > 0.25 * len {
+            let yc = y as f32 + 0.5;
+            let reach = (r + 1.5) * len / d.y.abs();
+            let xc = a.x + (yc - a.y) * d.x / d.y;
+            (((xc - reach).floor() as i32).max(bounds.x), ((xc + reach).ceil() as i32 + 1).min(bounds.right()))
+        } else {
+            (bounds.x, bounds.right())
+        };
+        for x in x0..x1 {
+            let dist = dist_to_segment(Pt::new(x as f32 + 0.5, y as f32 + 0.5), a, b);
+            let cov = (r + 0.5 - dist).clamp(0.0, 1.0) * strength;
             if cov > 0.0 {
                 mask.max_at(x, y, to_u8(cov));
             }
@@ -308,6 +320,31 @@ mod tests {
         assert_eq!(m.get(10, 14), 0);
         assert!(m.get(0, 10) < 255); // round cap edge
         assert_eq!(m.get(19, 2), 0);
+    }
+
+    #[test]
+    fn steep_capsules_match_brute_force() {
+        // The per-row band must cover exactly what a full scan covers.
+        for (a, b, r) in [
+            (Pt::new(3.0, 2.0), Pt::new(17.0, 38.0), 2.0),
+            (Pt::new(30.0, 1.0), Pt::new(2.5, 39.0), 0.5),
+            (Pt::new(10.0, 5.0), Pt::new(14.0, 30.0), 6.0),
+            (Pt::new(5.0, 35.0), Pt::new(35.0, 5.0), 3.5),
+        ] {
+            let mut fast = Mask::new(40, 40);
+            stamp_capsule(&mut fast, a, b, r, 1.0);
+            let mut full = Mask::new(40, 40);
+            for y in 0..40 {
+                for x in 0..40 {
+                    let d = dist_to_segment(Pt::new(x as f32 + 0.5, y as f32 + 0.5), a, b);
+                    let cov = (r.max(0.5) + 0.5 - d).clamp(0.0, 1.0);
+                    if cov > 0.0 {
+                        full.max_at(x, y, to_u8(cov));
+                    }
+                }
+            }
+            assert_eq!(fast, full, "{a:?} {b:?} {r}");
+        }
     }
 
     #[test]

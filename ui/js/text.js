@@ -6,6 +6,26 @@ const FONTS = [
   'Georgia', 'Impact', 'Liberation Sans', 'Liberation Serif', 'Noto Sans', 'Noto Serif', 'Times New Roman',
   'Trebuchet MS', 'Ubuntu', 'Verdana', 'sans-serif', 'serif', 'monospace',
 ];
+const GENERIC = ['sans-serif', 'serif', 'monospace'];
+const PREFERRED = ['Segoe UI', 'Noto Sans', 'DejaVu Sans', 'Liberation Sans', 'Ubuntu', 'Arial'];
+
+/** CSS font-family value: named fonts quoted, always with a fallback. */
+export function family(font) {
+  return GENERIC.includes(font) ? font : `"${font}", sans-serif`;
+}
+
+/** True when the browser really has `font` (its metrics differ from every generic family). */
+function installed(font) {
+  if (GENERIC.includes(font)) return true;
+  const ctx = document.createElement('canvas').getContext('2d');
+  const sample = 'mmmmmmmmmmlliWWQ@#%';
+  return GENERIC.some((base) => {
+    ctx.font = `40px ${base}`;
+    const w0 = ctx.measureText(sample).width;
+    ctx.font = `40px "${font}", ${base}`;
+    return ctx.measureText(sample).width !== w0;
+  });
+}
 
 export class TextTool {
   constructor(app) {
@@ -21,19 +41,23 @@ export class TextTool {
       strike: document.getElementById('textStrike'),
       opaque: document.getElementById('textOpaque'),
     };
-    this.opts = { font: 'Segoe UI', size: 24, bold: false, italic: false, underline: false, strike: false, opaque: false };
+    const fonts = FONTS.filter(installed);
+    const font = PREFERRED.find((f) => fonts.includes(f)) || 'sans-serif';
+    this.opts = { font, size: 24, bold: false, italic: false, underline: false, strike: false, opaque: false };
     this.pos = null; // image coordinates of the box
     this.active = false;
-    for (const f of FONTS) {
+    for (const f of fonts) {
       const o = document.createElement('option');
       o.value = o.textContent = f;
+      o.style.fontFamily = family(f);
       this.fontSel.appendChild(o);
     }
     this.fontSel.value = this.opts.font;
     this.fontSel.addEventListener('change', () => this.set('font', this.fontSel.value));
-    this.sizeInput.addEventListener('input', () => {
-      const v = Number(this.sizeInput.value);
-      if (v >= 6 && v <= 400) this.set('size', v);
+    // Applied when the value is complete (Enter or leaving the field), clamped to 6-400.
+    this.sizeInput.addEventListener('change', () => {
+      const v = Math.round(Number(this.sizeInput.value));
+      this.set('size', Number.isFinite(v) && v > 0 ? Math.min(400, Math.max(6, v)) : this.opts.size);
     });
     for (const [k, el] of Object.entries(this.toggles)) {
       el.addEventListener('click', () => this.set(k, !this.opts[k]));
@@ -41,7 +65,9 @@ export class TextTool {
     document.getElementById('textApply').addEventListener('click', () => this.commit());
     this.box.addEventListener('input', () => this.autosize());
     this.box.addEventListener('keydown', (e) => {
-      e.stopPropagation();
+      // File shortcuts (Ctrl+S, F12...) still reach the application; editing keys stay here.
+      const fileKey = ((e.ctrlKey || e.metaKey) && ['s', 'o', 'n', 'p'].includes(e.key.toLowerCase())) || e.key === 'F11' || e.key === 'F12';
+      if (!fileKey) e.stopPropagation();
       if (e.key === 'Escape') {
         e.preventDefault();
         this.cancel();
@@ -75,7 +101,7 @@ export class TextTool {
 
   fontString(scale = 1) {
     const o = this.opts;
-    return `${o.italic ? 'italic ' : ''}${o.bold ? 'bold ' : ''}${o.size * scale}px "${o.font}"`;
+    return `${o.italic ? 'italic ' : ''}${o.bold ? 'bold ' : ''}${o.size * scale}px ${family(o.font)}`;
   }
 
   style() {

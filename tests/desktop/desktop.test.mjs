@@ -192,6 +192,24 @@ test('save writes a real file, open reads it back', async () => {
   }
 });
 
+test('the extension of the chosen file decides the saved format', async () => {
+  const s = await session();
+  const path = join(dir, 'photo.jpg');
+  try {
+    // PNG was the format picked, but the file name says .jpg: JPEG bytes are written.
+    const r = await s.run(`
+      const p = window.paint;
+      const ok = await p.write(p.platform.FORMATS[0], arguments[0], 'photo.jpg');
+      return { ok, format: p.file.format.ext };`, path);
+    assert.equal(r.ok, true);
+    assert.equal(r.format, 'jpg');
+    const disk = await readFile(path);
+    assert.deepEqual([...disk.subarray(0, 2)], [0xff, 0xd8]);
+  } finally {
+    await s.close();
+  }
+});
+
 test('a file given on the command line is opened at start', async () => {
   const path = join(dir, 'start.png');
   // 3x2 PNG made by the save test's engine is not available here: write one with the app first.

@@ -53,17 +53,20 @@ export class LayersPanel {
       li.dataset.testid = `layer-${i}`;
       li.classList.toggle('active', i === st.active_layer);
       li.classList.toggle('hidden-layer', !l.visible);
-      li.innerHTML = `<img class="layer-thumb" alt=""><span class="layer-name"></span><button class="icon-btn small" data-testid="layer-eye-${i}">${icon(l.visible ? 'eye' : 'eyeOff')}</button>`;
+      li.innerHTML = `<img class="layer-thumb" alt="" draggable="false"><span class="layer-name"></span><button class="icon-btn small" data-testid="layer-eye-${i}">${icon(l.visible ? 'eye' : 'eyeOff')}</button>`;
       li.querySelector('.layer-name').textContent = layerName(l.name);
       const eye = li.querySelector('button');
       eye.title = t('layers.toggle');
       eye.addEventListener('click', (e) => {
         e.stopPropagation();
+        this.app.commitTransient();
         this.app.engine.set_layer_visible(i, !l.visible);
         this.app.changed({ layers: true });
       });
       li.addEventListener('click', () => {
         if (this.app.state.active_layer !== i) {
+          // Text being typed belongs to the layer that was active.
+          this.app.commitTransient();
           this.app.engine.set_active_layer(i);
           this.app.changed({ layers: true });
         }
@@ -76,15 +79,20 @@ export class LayersPanel {
 
   rename(span, i, current) {
     const input = document.createElement('input');
-    input.value = layerName(current);
+    const shown = layerName(current);
+    input.value = shown;
     input.dataset.testid = 'layer-rename';
     span.textContent = '';
     span.appendChild(input);
     input.focus();
     input.select();
+    let finished = false;
     const done = (ok) => {
-      if (!input.isConnected) return;
-      if (ok) this.app.engine.rename_layer(i, input.value);
+      // Escape then the blur caused by rebuilding the list must not rename.
+      if (finished) return;
+      finished = true;
+      const name = input.value.trim();
+      if (ok && name && name !== shown) this.app.engine.rename_layer(i, name);
       this.key = '';
       this.app.changed({ layers: true });
     };
@@ -98,6 +106,7 @@ export class LayersPanel {
 
   dragStart(e, li, from) {
     if (e.button !== 0 || e.target.closest('button,input')) return;
+    e.preventDefault(); // no native image drag
     const startY = e.clientY;
     let moved = false;
     const move = (ev) => {
@@ -106,16 +115,21 @@ export class LayersPanel {
         li.classList.add('dragging');
       }
     };
-    const up = (ev) => {
+    const stop = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', stop);
       li.classList.remove('dragging');
+    };
+    const up = (ev) => {
+      stop();
       if (!moved) return;
       const target = document.elementFromPoint(ev.clientX, ev.clientY);
       const over = target && target.closest('.layer-item');
       if (over) {
         const to = Number(over.dataset.index);
         if (to !== from) {
+          this.app.commitTransient();
           this.app.engine.move_layer(from, to);
           this.app.changed({ layers: true });
         }
@@ -123,6 +137,7 @@ export class LayersPanel {
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', stop);
   }
 
   scheduleThumbs() {

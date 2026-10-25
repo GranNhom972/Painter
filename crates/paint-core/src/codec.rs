@@ -67,11 +67,33 @@ impl Format {
 /// Largest accepted image side, to keep memory bounded.
 pub const MAX_SIDE: u32 = 16384;
 
+/// Largest accepted picture area (64 megapixels: a layer is then 256 MiB), so a
+/// document and its undo copies stay within what WebAssembly can address.
+pub const MAX_PIXELS: u64 = 64 * 1024 * 1024;
+
+/// Whether a picture of `w` x `h` is within the size limits.
+pub fn size_ok(w: u32, h: u32) -> bool {
+    w >= 1 && h >= 1 && w <= MAX_SIDE && h <= MAX_SIDE && w as u64 * h as u64 <= MAX_PIXELS
+}
+
+/// Decodes any supported file, applying the EXIF orientation (camera photos).
 pub fn decode(bytes: &[u8]) -> Result<Image, String> {
-    let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
-    if img.width() == 0 || img.height() == 0 || img.width() > MAX_SIDE || img.height() > MAX_SIDE {
-        return Err(format!("unsupported image size {}x{}", img.width(), img.height()));
+    use image::ImageDecoder;
+    let err = |e: image::ImageError| e.to_string();
+    let mut reader = image::ImageReader::new(Cursor::new(bytes)).with_guessed_format().map_err(|e| e.to_string())?;
+    // Our own limits replace the image crate's default 512 MiB allocation cap.
+    let mut limits = image::Limits::no_limits();
+    limits.max_image_width = Some(MAX_SIDE);
+    limits.max_image_height = Some(MAX_SIDE);
+    reader.limits(limits);
+    let mut decoder = reader.into_decoder().map_err(err)?;
+    let (w, h) = decoder.dimensions();
+    if !size_ok(w, h) {
+        return Err(format!("image too large ({w}x{h}); the maximum is {} megapixels and {MAX_SIDE} pixels per side", MAX_PIXELS / (1024 * 1024)));
     }
+    let orientation = decoder.orientation().unwrap_or(image::metadata::Orientation::NoTransforms);
+    let mut img = image::DynamicImage::from_decoder(decoder).map_err(err)?;
+    img.apply_orientation(orientation);
     let rgba = img.to_rgba8();
     let (w, h) = rgba.dimensions();
     Image::from_rgba(w, h, rgba.into_raw())

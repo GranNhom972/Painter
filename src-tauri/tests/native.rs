@@ -37,6 +37,42 @@ fn atomic_write_creates_and_replaces() {
 }
 
 #[test]
+fn overlapping_saves_of_the_same_file_all_succeed() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("picture.png");
+    let data = vec![7u8; 1 << 20];
+    for _ in 0..20 {
+        let (a, b) = std::thread::scope(|s| {
+            let h1 = s.spawn(|| write_atomic(&target, &data));
+            let h2 = s.spawn(|| write_atomic(&target, &data));
+            (h1.join().unwrap(), h2.join().unwrap())
+        });
+        assert!(a.is_ok() && b.is_ok(), "{a:?} {b:?}");
+        assert_eq!(std::fs::metadata(&target).unwrap().len(), data.len() as u64);
+    }
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1, "no temporary file left");
+}
+
+#[cfg(unix)]
+#[test]
+fn saving_keeps_permissions_and_follows_symlinks() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let real = dir.path().join("real.png");
+    std::fs::write(&real, b"old").unwrap();
+    std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o640)).unwrap();
+    let link = dir.path().join("link.png");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    write_atomic(&link, b"new").unwrap();
+    assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink(), "the link is still a link");
+    assert_eq!(std::fs::read(&real).unwrap(), b"new");
+    assert_eq!(std::fs::metadata(&real).unwrap().permissions().mode() & 0o777, 0o640);
+    // Very long names still save (the temporary name does not depend on them).
+    let long = dir.path().join(format!("{}.png", "x".repeat(240)));
+    write_atomic(&long, b"ok").unwrap();
+}
+
+#[test]
 fn command_line_file() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("photo d'été.png");

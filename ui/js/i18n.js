@@ -160,6 +160,30 @@ const fr = {
   'msg.saved': 'Enregistré : {name}',
   'msg.copied': 'Sélection copiée dans le presse-papiers',
   'msg.noBackground': "Aucun arrière-plan uni détecté.",
+  'color.name.0': 'Noir',
+  'color.name.1': 'Gris 50 %',
+  'color.name.2': 'Rouge foncé',
+  'color.name.3': 'Rouge',
+  'color.name.4': 'Orange',
+  'color.name.5': 'Jaune',
+  'color.name.6': 'Vert',
+  'color.name.7': 'Turquoise',
+  'color.name.8': 'Indigo',
+  'color.name.9': 'Violet',
+  'color.name.10': 'Blanc',
+  'color.name.11': 'Gris 25 %',
+  'color.name.12': 'Marron',
+  'color.name.13': 'Rose',
+  'color.name.14': 'Or',
+  'color.name.15': 'Jaune clair',
+  'color.name.16': 'Citron vert',
+  'color.name.17': 'Turquoise clair',
+  'color.name.18': 'Gris-bleu',
+  'color.name.19': 'Lavande',
+  'msg.tooLarge': "Image trop grande : au plus 64 mégapixels et 16 384 pixels par côté.",
+  'key.del': 'Suppr',
+  'key.crop': 'Ctrl+Maj+X',
+  'menu.ribbon': 'Ruban',
 };
 
 const en = {
@@ -322,6 +346,30 @@ const en = {
   'msg.saved': 'Saved: {name}',
   'msg.copied': 'Selection copied to the clipboard',
   'msg.noBackground': 'No plain background found.',
+  'color.name.0': 'Black',
+  'color.name.1': 'Gray-50%',
+  'color.name.2': 'Dark red',
+  'color.name.3': 'Red',
+  'color.name.4': 'Orange',
+  'color.name.5': 'Yellow',
+  'color.name.6': 'Green',
+  'color.name.7': 'Turquoise',
+  'color.name.8': 'Indigo',
+  'color.name.9': 'Purple',
+  'color.name.10': 'White',
+  'color.name.11': 'Gray-25%',
+  'color.name.12': 'Brown',
+  'color.name.13': 'Rose',
+  'color.name.14': 'Gold',
+  'color.name.15': 'Light yellow',
+  'color.name.16': 'Lime',
+  'color.name.17': 'Light turquoise',
+  'color.name.18': 'Blue-gray',
+  'color.name.19': 'Lavender',
+  'msg.tooLarge': 'Picture too large: at most 64 megapixels and 16,384 pixels per side.',
+  'key.del': 'Del',
+  'key.crop': 'Ctrl+Shift+X',
+  'menu.ribbon': 'Ribbon',
 };
 
 const tables = { fr, en };
@@ -367,6 +415,9 @@ export function layerName(name) {
 export function applyTranslations(root = document) {
   root.querySelectorAll('[data-i18n]').forEach((el) => {
     el.textContent = t(el.dataset.i18n);
+  });
+  root.querySelectorAll('[data-i18n-label]').forEach((el) => {
+    el.setAttribute('aria-label', t(el.dataset.i18nLabel));
   });
   root.querySelectorAll('[data-i18n-title]').forEach((el) => {
     const label = t(el.dataset.i18nTitle);

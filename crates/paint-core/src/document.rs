@@ -74,18 +74,20 @@ impl Document {
             return;
         }
         let w = self.width as usize;
-        for y in rect.y..rect.bottom() {
-            let row = (y as usize * w + rect.x as usize) * 4;
-            let n = rect.w as usize * 4;
-            out.data_mut()[row..row + n].iter_mut().for_each(|v| *v = 0);
-        }
+        let n = rect.w as usize * 4;
+        let mut empty = true;
         for (i, layer) in self.layers.iter().enumerate() {
             if layer.visible {
                 let src = layer.image.data();
                 let dst = out.data_mut();
                 for y in rect.y..rect.bottom() {
                     let row = (y as usize * w + rect.x as usize) * 4;
-                    for k in (row..row + rect.w as usize * 4).step_by(4) {
+                    if empty {
+                        // Over nothing, "source over" is a plain copy.
+                        dst[row..row + n].copy_from_slice(&src[row..row + n]);
+                        continue;
+                    }
+                    for k in (row..row + n).step_by(4) {
                         let s = [src[k], src[k + 1], src[k + 2], src[k + 3]];
                         if s[3] == 0 {
                             continue;
@@ -94,35 +96,47 @@ impl Document {
                         dst[k..k + 4].copy_from_slice(&blend_over(d, s));
                     }
                 }
+                empty = false;
             }
-            if i == self.active {
+            if empty && i == self.active && floating.is_some() {
+                clear_rows(out, rect, w);
+                empty = false;
+            }
+            if i == self.active && layer.visible {
                 if let Some((sel, key)) = floating {
                     if let Some(img) = sel.current_image() {
                         let r = sel.rect.intersect(&rect);
-                        let mask = sel.current_mask();
+                        let iw = img.width() as usize;
+                        let src = img.data();
+                        let mask = sel.current_mask().map(|m| (m.data(), m.width() as usize));
+                        let key = key.map(Rgba::to_array);
+                        let dst = out.data_mut();
                         for y in r.y..r.bottom() {
+                            let sy = (y - sel.rect.y) as usize;
+                            let drow = y as usize * w;
                             for x in r.x..r.right() {
-                                let (sx, sy) = (x - sel.rect.x, y - sel.rect.y);
-                                let mut p = img.get_raw(sx, sy);
-                                if let Some(m) = mask {
-                                    if m.get(sx, sy) < 128 {
+                                let sx = (x - sel.rect.x) as usize;
+                                if let Some((md, mw)) = mask {
+                                    if md[sy * mw + sx] < 128 {
                                         continue;
                                     }
                                 }
-                                if key == Some(Rgba::from_array(p)) {
+                                let si = (sy * iw + sx) * 4;
+                                let p = [src[si], src[si + 1], src[si + 2], src[si + 3]];
+                                if p[3] == 0 || key == Some(p) {
                                     continue;
                                 }
-                                if p[3] == 0 {
-                                    continue;
-                                }
-                                let d = out.get_raw(x, y);
-                                p = blend_over(d, p);
-                                out.set_raw(x, y, p);
+                                let di = (drow + x as usize) * 4;
+                                let d = [dst[di], dst[di + 1], dst[di + 2], dst[di + 3]];
+                                dst[di..di + 4].copy_from_slice(&blend_over(d, p));
                             }
                         }
                     }
                 }
             }
+        }
+        if empty {
+            clear_rows(out, rect, w);
         }
     }
 
@@ -172,16 +186,16 @@ impl Document {
         true
     }
 
-    /// Merges layer `i` into the layer below it.
+    /// Merges layer `i` into the layer below it. Both layers' pixels are kept
+    /// (hidden ones included); the result is visible if either layer was.
     pub fn merge_down(&mut self, i: usize) -> bool {
         if i == 0 || i >= self.layers.len() {
             return false;
         }
         let top = self.layers.remove(i);
-        if top.visible {
-            let below = Arc::make_mut(&mut self.layers[i - 1].image);
-            below.draw(&top.image, 0, 0, &Default::default());
-        }
+        let below = &mut self.layers[i - 1];
+        Arc::make_mut(&mut below.image).draw(&top.image, 0, 0, &Default::default());
+        below.visible |= top.visible;
         self.active = i - 1;
         true
     }
@@ -263,6 +277,15 @@ impl Document {
     }
 }
 
+/// Makes `rect` of `out` transparent.
+fn clear_rows(out: &mut Image, rect: IRect, w: usize) {
+    let n = rect.w as usize * 4;
+    for y in rect.y..rect.bottom() {
+        let row = (y as usize * w + rect.x as usize) * 4;
+        out.data_mut()[row..row + n].fill(0);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,6 +299,26 @@ mod tests {
         assert_eq!(d.flatten(None).get(0, 0), Rgba::WHITE);
         d.layers[1].visible = false;
         assert_eq!(d.flatten(None).get(1, 1), Rgba::WHITE);
+    }
+
+    #[test]
+    fn composite_with_hidden_or_transparent_layers() {
+        let mut d = Document::new(3, 1, Rgba::WHITE);
+        d.add_layer();
+        d.active_image_mut().set(0, 0, Rgba::new(255, 0, 0, 128));
+        let flat = d.flatten(None);
+        assert_eq!(flat.get(1, 0), Rgba::WHITE);
+        assert_eq!(flat.get(0, 0), Rgba::new(255, 127, 127, 255));
+        // Everything hidden: fully transparent, even where the frame had pixels.
+        let mut out = Image::filled(3, 1, Rgba::BLACK);
+        d.layers.iter_mut().for_each(|l| l.visible = false);
+        d.composite_into(&mut out, d.bounds(), None);
+        assert!(out.is_uniform(Rgba::TRANSPARENT));
+        // Only the upper (semi-transparent) layer visible: copied as is.
+        d.layers[1].visible = true;
+        d.composite_into(&mut out, d.bounds(), None);
+        assert_eq!(out.get(0, 0), Rgba::new(255, 0, 0, 128));
+        assert_eq!(out.get(2, 0), Rgba::TRANSPARENT);
     }
 
     #[test]

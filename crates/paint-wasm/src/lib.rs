@@ -205,34 +205,39 @@ impl Engine {
             270 => Transform::RotateCcw,
             _ => return false,
         };
-        self.ed.transform(t);
-        true
+        self.ed.transform(t)
     }
 
-    pub fn flip_horizontal(&mut self) {
-        self.ed.transform(Transform::FlipHorizontal);
+    pub fn flip_horizontal(&mut self) -> bool {
+        self.ed.transform(Transform::FlipHorizontal)
     }
 
-    pub fn flip_vertical(&mut self) {
-        self.ed.transform(Transform::FlipVertical);
+    pub fn flip_vertical(&mut self) -> bool {
+        self.ed.transform(Transform::FlipVertical)
     }
 
-    /// Scales the selection, or the whole image without one.
-    pub fn resize_image(&mut self, w: u32, h: u32) {
-        self.ed.transform(Transform::Resize(w.clamp(1, codec::MAX_SIDE), h.clamp(1, codec::MAX_SIDE)));
+    /// Scales the selection, or the whole image without one. False when too large.
+    pub fn resize_image(&mut self, w: u32, h: u32) -> bool {
+        self.ed.transform(Transform::Resize(w.max(1), h.max(1)))
     }
 
-    pub fn skew(&mut self, deg_x: f32, deg_y: f32) {
-        self.ed.transform(Transform::Skew(deg_x, deg_y));
+    /// False when the result would be too large.
+    pub fn skew(&mut self, deg_x: f32, deg_y: f32) -> bool {
+        self.ed.transform(Transform::Skew(deg_x, deg_y))
     }
 
-    pub fn resize_canvas(&mut self, w: u32, h: u32) {
-        self.ed.resize_canvas(w, h);
+    pub fn resize_canvas(&mut self, w: u32, h: u32) -> bool {
+        self.ed.resize_canvas(w, h)
     }
 
     /// Canvas resize placing the old pixels at (dx, dy) (left/top handles).
-    pub fn resize_canvas_at(&mut self, w: u32, h: u32, dx: i32, dy: i32) {
-        self.ed.resize_canvas_at(w, h, dx, dy);
+    pub fn resize_canvas_at(&mut self, w: u32, h: u32, dx: i32, dy: i32) -> bool {
+        self.ed.resize_canvas_at(w, h, dx, dy)
+    }
+
+    /// Whether a picture of this size fits the limits (side and memory budget).
+    pub fn size_ok(w: u32, h: u32) -> bool {
+        codec::size_ok(w, h)
     }
 
     pub fn remove_background(&mut self, tolerance: u8) -> bool {
@@ -253,15 +258,21 @@ impl Engine {
     /// Pastes encoded image bytes (PNG, JPEG, ...) as a floating selection.
     pub fn paste_bytes(&mut self, bytes: &[u8], x: i32, y: i32) -> Result<(), JsValue> {
         let img = codec::decode(bytes).map_err(err)?;
-        self.ed.paste(img, x, y);
-        Ok(())
+        if self.ed.paste(img, x, y) {
+            Ok(())
+        } else {
+            Err(err("image too large"))
+        }
     }
 
     /// Pastes raw RGBA pixels as a floating selection.
     pub fn paste_rgba(&mut self, w: u32, h: u32, data: Vec<u8>, x: i32, y: i32) -> Result<(), JsValue> {
         let img = Image::from_rgba(w, h, data).map_err(err)?;
-        self.ed.paste(img, x, y);
-        Ok(())
+        if self.ed.paste(img, x, y) {
+            Ok(())
+        } else {
+            Err(err("image too large"))
+        }
     }
 
     /// Blends raw RGBA pixels (rendered text) onto the active layer.

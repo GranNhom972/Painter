@@ -9,6 +9,7 @@ export const icons = {
   undo: P(s('M7.5 4.5 4 8l3.5 3.5M4 8h8a4 4 0 0 1 0 8H9')),
   redo: P(s('M12.5 4.5 16 8l-3.5 3.5M16 8H8a4 4 0 0 0 0 8h3')),
   gear: P(s('M10 12.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2z') + s('M8.6 2.8h2.8l.4 2 1.4.8 1.9-.7 1.4 2.4-1.5 1.4v1.6l1.5 1.4-1.4 2.4-1.9-.7-1.4.8-.4 2H8.6l-.4-2-1.4-.8-1.9.7-1.4-2.4L5 10.8V9.2L3.5 7.8l1.4-2.4 1.9.7 1.4-.8z')),
+  chevronRight: `<svg viewBox="0 0 12 12" class="ico" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   chevron: `<svg viewBox="0 0 10 10" class="chev" aria-hidden="true"><path d="M2.5 3.8 5 6.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   selectRect: P(s('M3 6V3h3M8.5 3h3M14 3h3v3M17 8.5v3M17 14v3h-3M11.5 17h-3M6 17H3v-3M3 11.5v-3')),
   selectFree: P(s('M5 6.5C6 3.5 10.5 2.5 13.5 4s3.5 5 1.5 7.5-6 2-7.5 4.5' ) .replace('stroke-linejoin="round"', 'stroke-linejoin="round" stroke-dasharray="2 2"') + s('M7.5 16.5 6 18')),

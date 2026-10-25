@@ -15,13 +15,22 @@ pub struct Selection {
     floating: Option<Image>,
     /// Outline sub-paths in coordinates relative to `rect` (0..1), for display.
     outline: Vec<Vec<Pt>>,
-    /// Caches of `floating` and `mask` resampled to `rect` size.
+    /// `floating` and `mask` resampled to `rect` size, only while that size differs
+    /// (no duplicate copy in memory or in undo snapshots otherwise).
     scaled: Option<Image>,
     scaled_mask: Option<Mask>,
 }
 
 fn rect_outline() -> Vec<Vec<Pt>> {
     vec![vec![Pt::new(0.0, 0.0), Pt::new(1.0, 0.0), Pt::new(1.0, 1.0), Pt::new(0.0, 1.0)]]
+}
+
+/// Canvas-space paths to coordinates relative to `r`.
+fn relative_to(paths: &[Vec<Pt>], r: IRect) -> Vec<Vec<Pt>> {
+    paths
+        .iter()
+        .map(|path| path.iter().map(|p| Pt::new((p.x - r.x as f32) / r.w.max(1) as f32, (p.y - r.y as f32) / r.h.max(1) as f32)).collect())
+        .collect()
 }
 
 impl Selection {
@@ -37,13 +46,8 @@ impl Selection {
         let full = raster::polygon_mask(canvas_w, canvas_h, points);
         let bbox = full.bbox()?;
         let mask = full.sub_mask(bbox);
-        let outline = vec![points
-            .iter()
-            .map(|p| Pt::new((p.x - bbox.x as f32) / bbox.w as f32, (p.y - bbox.y as f32) / bbox.h as f32))
-            .collect()];
-        let mut s = Selection { rect: bbox, mask: Some(mask), floating: None, outline, scaled: None, scaled_mask: None };
-        s.refresh();
-        Some(s)
+        let outline = relative_to(&[points.to_vec()], bbox);
+        Some(Selection { rect: bbox, mask: Some(mask), floating: None, outline, scaled: None, scaled_mask: None })
     }
 
     /// Floating selection holding `image` at (`x`, `y`) (paste).
@@ -51,12 +55,12 @@ impl Selection {
         let rect = IRect::new(x, y, image.width() as i32, image.height() as i32);
         let mut s = Selection::rect(rect);
         s.floating = Some(image);
-        s.refresh();
         s
     }
 
-    /// Everything except `self` within a canvas of the given size.
-    pub fn inverted(&self, canvas_w: u32, canvas_h: u32) -> Self {
+    /// Everything except `self` within a canvas of the given size, shrunk to what is
+    /// actually selected. `None` when nothing remains (inverse of Select All).
+    pub fn inverted(&self, canvas_w: u32, canvas_h: u32) -> Option<Self> {
         let mut m = Mask::full(canvas_w, canvas_h);
         let own = self.rect;
         for y in own.y.max(0)..own.bottom().min(canvas_h as i32) {
@@ -66,19 +70,18 @@ impl Selection {
                 }
             }
         }
-        let rect = IRect::new(0, 0, canvas_w as i32, canvas_h as i32);
-        let to_rel = |p: Pt| Pt::new(p.x / canvas_w as f32, p.y / canvas_h as f32);
+        let bbox = m.bbox()?;
+        let mask = m.sub_mask(bbox);
+        // Ants around the selected area and around the holes inside it.
+        let inside = |path: &Vec<Pt>| path.iter().all(|p| p.x >= bbox.x as f32 - 0.5 && p.y >= bbox.y as f32 - 0.5 && p.x <= bbox.right() as f32 + 0.5 && p.y <= bbox.bottom() as f32 + 0.5);
         let mut outline = rect_outline();
-        for path in &self.outline {
-            outline.push(
-                path.iter()
-                    .map(|p| to_rel(Pt::new(self.rect.x as f32 + p.x * self.rect.w as f32, self.rect.y as f32 + p.y * self.rect.h as f32)))
-                    .collect(),
-            );
-        }
-        let mut s = Selection { rect, mask: Some(m), floating: None, outline, scaled: None, scaled_mask: None };
-        s.refresh();
-        s
+        outline.extend(relative_to(&self.outline_canvas().into_iter().filter(inside).collect::<Vec<_>>(), bbox));
+        Some(Selection { rect: bbox, mask: Some(mask), floating: None, outline, scaled: None, scaled_mask: None })
+    }
+
+    /// The same area as a selection whose pixels are back in the layer.
+    pub fn settled(&self) -> Self {
+        Selection { rect: self.rect, mask: self.current_mask().cloned(), floating: None, outline: self.outline.clone(), scaled: None, scaled_mask: None }
     }
 
     pub fn is_floating(&self) -> bool {
@@ -102,21 +105,25 @@ impl Selection {
             .collect()
     }
 
-    /// Recomputes the size-dependent caches after `rect` changes.
+    fn size(&self) -> (u32, u32) {
+        (self.rect.w.max(1) as u32, self.rect.h.max(1) as u32)
+    }
+
+    /// Recomputes the size-dependent caches after `rect` changes (smooth resampling).
     pub fn refresh(&mut self) {
-        let (w, h) = (self.rect.w.max(1) as u32, self.rect.h.max(1) as u32);
-        self.scaled = self.floating.as_ref().map(|f| if f.width() == w && f.height() == h { f.clone() } else { f.resized(w, h) });
-        self.scaled_mask = self.mask.as_ref().map(|m| if m.width() == w && m.height() == h { m.clone() } else { m.resized(w, h) });
+        let (w, h) = self.size();
+        self.scaled = self.floating.as_ref().filter(|f| (f.width(), f.height()) != (w, h)).map(|f| f.resized(w, h));
+        self.scaled_mask = self.mask.as_ref().filter(|m| (m.width(), m.height()) != (w, h)).map(|m| m.resized(w, h));
     }
 
     /// Mask at the current size (None = full rectangle).
     pub fn current_mask(&self) -> Option<&Mask> {
-        self.scaled_mask.as_ref()
+        self.scaled_mask.as_ref().or(self.mask.as_ref())
     }
 
     /// Floating pixels at the current size.
     pub fn current_image(&self) -> Option<&Image> {
-        self.scaled.as_ref()
+        self.scaled.as_ref().or(self.floating.as_ref())
     }
 
     /// Whether the canvas pixel (x, y) is selected.
@@ -124,7 +131,7 @@ impl Selection {
         if !self.rect.contains(x, y) {
             return false;
         }
-        match &self.scaled_mask {
+        match self.current_mask() {
             Some(m) => m.get(x - self.rect.x, y - self.rect.y) >= 128,
             None => true,
         }
@@ -136,11 +143,11 @@ impl Selection {
 
     /// Selected pixels of `layer` (or the floating pixels), transparent outside the mask.
     pub fn content(&self, layer: &Image) -> Image {
-        let mut img = match &self.scaled {
+        let mut img = match self.current_image() {
             Some(f) => f.clone(),
             None => layer.sub_image(self.rect),
         };
-        if let Some(m) = &self.scaled_mask {
+        if let Some(m) = self.current_mask() {
             for y in 0..img.height() as i32 {
                 for x in 0..img.width() as i32 {
                     if m.get(x, y) < 128 {
@@ -162,14 +169,14 @@ impl Selection {
         if !keep_source {
             self.clear_area(layer, hole);
         }
+        self.mask = self.current_mask().cloned();
         self.floating = Some(content);
-        self.mask = self.scaled_mask.clone();
         self.refresh();
     }
 
     /// Fills the selected area of `layer` with `c`.
     pub fn clear_area(&self, layer: &mut Image, c: Rgba) {
-        match &self.scaled_mask {
+        match self.current_mask() {
             Some(m) => layer.fill_masked(self.rect.x, self.rect.y, m, c),
             None => layer.fill_rect(self.rect, c),
         }
@@ -178,16 +185,21 @@ impl Selection {
     /// Stamps the floating pixels onto `layer` (the selection stays floating).
     /// `key` skips pixels of that colour (transparent selection mode).
     pub fn stamp(&self, layer: &mut Image, key: Option<Rgba>) {
-        if let Some(img) = &self.scaled {
-            layer.draw(img, self.rect.x, self.rect.y, &DrawOptions { mask: self.scaled_mask.as_ref(), key, replace: false });
+        if let Some(img) = self.current_image() {
+            layer.draw(img, self.rect.x, self.rect.y, &DrawOptions { mask: self.current_mask(), key, replace: false });
         }
     }
 
     /// Transforms the floating pixels (rotate/flip/resize/skew of a selection).
     pub fn transform(&mut self, t: Transform) {
-        if let Some(img) = &self.scaled {
+        if let Some(img) = self.current_image() {
             let out = t.apply(img, Rgba::TRANSPARENT);
-            self.mask = self.scaled_mask.as_ref().map(|m| m.map_image(|i| t.apply(i, Rgba::TRANSPARENT)));
+            // Masks stay hard-edged: the preview and the commit treat them as on/off.
+            self.mask = self.current_mask().map(|m| {
+                let mut m = m.map_image(|i| t.apply(i, Rgba::TRANSPARENT));
+                m.threshold(128);
+                m
+            });
             self.rect = IRect::new(self.rect.x, self.rect.y, out.width() as i32, out.height() as i32);
             self.floating = Some(out);
             self.outline = match self.outline.iter().map(|path| path.iter().map(|p| t.map_relative(*p)).collect::<Option<Vec<_>>>()).collect() {
@@ -205,6 +217,39 @@ impl Selection {
 
     pub fn resize_to(&mut self, r: IRect) {
         self.rect = IRect::new(r.x, r.y, r.w.max(1), r.h.max(1));
+        self.refresh();
+    }
+
+    /// Resize with a fast nearest-neighbour preview (while a handle is dragged),
+    /// mirrored when the handle went past the opposite edge. Call
+    /// [`Selection::finish_resize`] with the same flips afterwards.
+    pub fn resize_preview(&mut self, r: IRect, flip_x: bool, flip_y: bool) {
+        self.rect = IRect::new(r.x, r.y, r.w.max(1), r.h.max(1));
+        let (w, h) = self.size();
+        let flipped = |img: Image| {
+            let img = if flip_x { img.flip_horizontal() } else { img };
+            if flip_y { img.flip_vertical() } else { img }
+        };
+        let resized = (flip_x || flip_y) || self.floating.as_ref().is_some_and(|f| (f.width(), f.height()) != (w, h));
+        self.scaled = self.floating.as_ref().filter(|_| resized).map(|f| flipped(f.resized_nearest(w, h)));
+        self.scaled_mask = self.mask.as_ref().filter(|m| flip_x || flip_y || (m.width(), m.height()) != (w, h)).map(|m| {
+            let m = m.resized(w, h);
+            m.map_image(|i| flipped(i.clone()))
+        });
+    }
+
+    /// Ends a handle drag: applies the mirroring for good and resamples smoothly.
+    pub fn finish_resize(&mut self, flip_x: bool, flip_y: bool) {
+        let (w, h) = self.size();
+        for (on, t) in [(flip_x, Transform::FlipHorizontal), (flip_y, Transform::FlipVertical)] {
+            if !on {
+                continue;
+            }
+            self.floating = self.floating.as_ref().map(|f| t.apply(f, Rgba::TRANSPARENT));
+            self.mask = self.mask.as_ref().map(|m| m.map_image(|i| t.apply(i, Rgba::TRANSPARENT)));
+            self.outline = self.outline.iter().map(|path| path.iter().map(|p| t.map_relative(*p).unwrap_or(*p)).collect()).collect();
+        }
+        self.rect = IRect::new(self.rect.x, self.rect.y, w as i32, h as i32);
         self.refresh();
     }
 
@@ -252,11 +297,17 @@ mod tests {
     #[test]
     fn inverted() {
         let s = Selection::rect(IRect::new(2, 2, 3, 3));
-        let inv = s.inverted(10, 10);
+        let inv = s.inverted(10, 10).unwrap();
         assert_eq!(inv.rect, IRect::new(0, 0, 10, 10));
         assert!(!inv.contains(3, 3));
         assert!(inv.contains(0, 0) && inv.contains(9, 9));
         assert_eq!(inv.outline().len(), 2);
+        // Inverting again gives the original area back, not the whole canvas.
+        let back = inv.inverted(10, 10).unwrap();
+        assert_eq!(back.rect, IRect::new(2, 2, 3, 3));
+        assert!(back.contains(3, 3) && !back.contains(0, 0));
+        // The inverse of everything is nothing.
+        assert!(Selection::rect(IRect::new(0, 0, 10, 10)).inverted(10, 10).is_none());
     }
 
     #[test]

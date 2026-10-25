@@ -145,7 +145,12 @@ fn files_text_and_settings() {
     e.pointer_up(8.0, 8.0);
     e.select_all();
     e.invert_selection();
+    assert!(!e.delete_selection(), "the inverse of everything selects nothing");
+    e.select_rect(0, 0, 4, 4);
+    e.invert_selection();
     assert!(e.delete_selection());
+    assert!(!paint_wasm::Engine::size_ok(20_000, 10) && paint_wasm::Engine::size_ok(16, 16));
+    assert!(!e.resize_image(16384, 16384), "over the memory budget");
     e.select_all();
     assert!(e.nudge(1, 1));
     e.escape();

@@ -68,11 +68,15 @@ export class App {
     this.bindKeyboard();
     this.bindClipboardEvents();
     this.bindDragDrop();
-    platform.onCloseRequested(Object.assign(() => this.confirmDiscard(), { isDirty: () => this.engine.is_modified() }));
+    platform.onCloseRequested(Object.assign(() => this.confirmDiscard(), { isDirty: () => this.engine.is_modified() || (this.text.active && this.text.box.value.trim() !== '') }));
+    document.documentElement.lang = language();
     this.view.layout();
     this.view.sizeOverlay();
+    this.view.fitIfLarge();
     this.layersDirty = true;
     this.flush();
+    this.updatePointerStatus(null);
+    this.updateFileStatus();
     this.updateZoomUi();
     this.loadInitialFile();
   }
@@ -114,7 +118,9 @@ export class App {
     const selTool = st.tool === 'select-rect' || st.tool === 'select-free';
     document.querySelectorAll('[data-tool]').forEach((b) => {
       const tool = b.dataset.tool;
-      b.classList.toggle('active', tool === st.tool || (tool === 'select' && selTool));
+      const on = tool === st.tool || (tool === 'select' && selTool);
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', String(on));
     });
     const selIcon = document.getElementById('selectionIcon');
     const wanted = st.tool === 'select-free' ? 'selectFree' : 'selectRect';
@@ -122,16 +128,22 @@ export class App {
       selIcon.dataset.icon = wanted;
       selIcon.innerHTML = icon(wanted);
     }
-    document.querySelector('[data-cmd="image.crop"]').disabled = !st.selection || st.selection.drawing;
+    const s = st.selection;
+    const onCanvas = s && s.x < st.width && s.y < st.height && s.x + s.w > 0 && s.y + s.h > 0;
+    document.querySelector('[data-cmd="image.crop"]').disabled = !s || s.drawing || !onCanvas;
     document.querySelector('[data-cmd="edit.undo"]').disabled = !st.can_undo;
     document.querySelector('[data-cmd="edit.redo"]').disabled = !st.can_redo;
     document.querySelector('[data-color-slot="1"] .swatch').style.background = st.color1;
     document.querySelector('[data-color-slot="2"] .swatch').style.background = st.color2;
-    document.querySelectorAll('[data-color-slot]').forEach((b) => b.classList.toggle('selected', Number(b.dataset.colorSlot) === this.activeSlot));
+    document.querySelectorAll('[data-color-slot]').forEach((b) => {
+      const on = Number(b.dataset.colorSlot) === this.activeSlot;
+      b.classList.toggle('selected', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
     this.text.setVisible(st.tool === 'text');
     if (this.text.active) this.text.style();
     const sel = st.selection;
-    document.getElementById('statSel').textContent = sel && sel.w > 0 ? `${sel.w} × ${sel.h}px` : '';
+    this.setStat('statSel', sel && sel.w > 0 ? `${sel.w} × ${sel.h}px` : '');
     this.updateCanvasStatus(st.width, st.height);
     this.updateTitle();
   }
@@ -141,35 +153,49 @@ export class App {
     platform.setTitle(`${this.state.modified ? '● ' : ''}${t('app.name')} - ${name}`);
   }
 
+  /** Status bar field; an empty field also hides its icon. */
+  setStat(id, text) {
+    const el = document.getElementById(id);
+    if (el.textContent !== text) el.textContent = text;
+    el.parentElement.classList.toggle('empty', !text);
+  }
+
   updatePointerStatus(p) {
-    const el = document.getElementById('statPos');
     if (!p) {
-      el.textContent = '';
+      this.setStat('statPos', '');
       return;
     }
     const x = Math.floor(p.x);
     const y = Math.floor(p.y);
-    el.textContent = x >= 0 && y >= 0 && x < this.state.width && y < this.state.height ? `${x}, ${y}px` : '';
+    this.setStat('statPos', x >= 0 && y >= 0 && x < this.state.width && y < this.state.height ? `${x}, ${y}px` : '');
   }
 
   updateCanvasStatus(w, h) {
-    document.getElementById('statCanvas').textContent = `${w} × ${h}px`;
+    this.setStat('statCanvas', `${w} × ${h}px`);
   }
 
   updateFileStatus() {
-    document.getElementById('statFile').textContent = this.file.size != null ? t('status.size', { size: formatBytes(this.file.size) }) : '';
+    this.setStat('statFile', this.file.size != null ? t('status.size', { size: formatBytes(this.file.size) }) : '');
   }
 
   updateZoomUi() {
     const z = this.view.zoom;
-    document.getElementById('zoomValue').textContent = `${Math.round(z * 1000) / 10}%`;
+    const label = `${Math.round(z * 100)}%`;
+    document.getElementById('zoomValue').textContent = label;
+    document.querySelector('[data-testid=zoom-value]').setAttribute('aria-label', `${t('status.zoom')} ${label}`);
     const slider = document.getElementById('zoomSlider');
     slider.value = Math.round((1000 * Math.log(z / 0.1)) / Math.log(80));
   }
 
-  /** Commits the text box, pending shape and floating selection. */
+  /** Applies the text box being edited (shapes and selections stay editable). */
   commitTransient() {
     if (this.text.active) this.text.commit();
+  }
+
+  /** Tells the user when the engine refused a size change (memory limits). */
+  sizeChecked(ok) {
+    if (!ok) this.toast(t('msg.tooLarge'));
+    return ok;
   }
 
   toast(msg) {
@@ -217,7 +243,15 @@ export class App {
       },
       'file.properties': () => this.properties(),
       'file.quit': () => platform.quit(() => this.confirmDiscard()),
-      'edit.undo': act(() => e().undo()),
+      'edit.undo': () => {
+        // While typing, Undo throws the text box away instead of undoing the picture.
+        if (this.text.active) {
+          this.text.cancel();
+          return;
+        }
+        e().undo();
+        this.changed({ layers: true });
+      },
       'edit.redo': act(() => e().redo()),
       'edit.cut': () => this.cut(),
       'edit.copy': () => this.copy(),
@@ -240,8 +274,8 @@ export class App {
       'view.fullscreen': () => platform.toggleFullscreen(),
       'image.crop': act(() => e().crop()),
       'image.resize': () => this.resizeSkew(),
-      'image.rotateRight': act(() => e().rotate(90)),
-      'image.rotateLeft': act(() => e().rotate(-90)),
+      'image.rotateRight': act(() => this.sizeChecked(e().rotate(90))),
+      'image.rotateLeft': act(() => this.sizeChecked(e().rotate(-90))),
       'image.rotate180': act(() => e().rotate(180)),
       'image.flipH': act(() => e().flip_horizontal()),
       'image.flipV': act(() => e().flip_vertical()),
@@ -278,6 +312,13 @@ export class App {
   // ----- ribbon & menus --------------------------------------------------------
 
   bindRibbon() {
+    // A mouse click on a toolbar button must not move the focus (so Enter/Space
+    // keep going to the picture, and the text box keeps its caret). Keyboard
+    // users still Tab to the buttons.
+    document.addEventListener('mousedown', (e) => {
+      const b = e.target.closest && e.target.closest('.menubar button, .ribbon button, .statusbar button, .layers-panel button, .text-bar button, .popup button');
+      if (b) e.preventDefault();
+    });
     document.querySelectorAll('[data-cmd]').forEach((el) => {
       el.addEventListener('click', () => this.run(el.dataset.cmd));
     });
@@ -285,6 +326,8 @@ export class App {
       el.addEventListener('click', () => this.setTool(el.dataset.tool));
     });
     document.querySelectorAll('[data-menu]').forEach((el) => {
+      el.setAttribute('aria-haspopup', 'menu');
+      el.setAttribute('aria-expanded', 'false');
       el.addEventListener('click', (ev) => {
         // Split buttons: the icon part activates the tool, the arrow opens the menu.
         const arrow = ev.target.closest('.chev') || ev.target.closest('[data-icon="chevron"]');
@@ -295,9 +338,39 @@ export class App {
           else if (tool === 'shape') this.setShape(this.state.shape);
           return;
         }
-        this.openMenu(el.dataset.menu, el);
+        this.openMenu(el.dataset.menu, el, ev.detail === 0);
+      });
+      // Down arrow opens the menu of any menu button (split buttons included).
+      el.addEventListener('keydown', (ev) => {
+        if (ev.key === 'ArrowDown') {
+          ev.preventDefault();
+          this.openMenu(el.dataset.menu, el, true);
+        }
       });
     });
+    const menuButtons = [...document.querySelectorAll('.menu-btn')];
+    this.popups.onNavigate = (dir) => {
+      const i = menuButtons.indexOf(this.popups.anchor);
+      const next = menuButtons[(i + dir + menuButtons.length) % menuButtons.length];
+      this.openMenu(next.dataset.menu, next, true);
+    };
+    // Narrow windows: collapse groups into dropdowns, then let the wheel scroll the ribbon.
+    const ribbon = document.getElementById('ribbon');
+    const steps = ['compact-colors', 'compact-image', 'compact-tight'];
+    const fit = () => {
+      ribbon.classList.remove(...steps);
+      for (const step of steps) {
+        if (ribbon.scrollWidth <= ribbon.clientWidth) break;
+        ribbon.classList.add(step);
+      }
+    };
+    new ResizeObserver(fit).observe(ribbon);
+    ribbon.addEventListener('wheel', (e) => {
+      if (!e.deltaX && ribbon.scrollWidth > ribbon.clientWidth) {
+        ribbon.scrollLeft += e.deltaY;
+        e.preventDefault();
+      }
+    }, { passive: false });
     // Menu bar: hovering another menu while one is open switches to it.
     document.querySelectorAll('.menu-btn').forEach((el) => {
       el.addEventListener('pointerenter', () => {
@@ -335,21 +408,27 @@ export class App {
     this.changed();
   }
 
-  buildPalette() {
-    const pal = document.getElementById('palette');
+  /** Fills the palette grid (the ribbon one, or a copy inside the compact Colours menu). */
+  buildPalette(pal = document.getElementById('palette'), prefix = 'palette') {
     pal.textContent = '';
+    pal.classList.add('palette');
+    pal.setAttribute('role', 'group');
+    pal.setAttribute('aria-label', t('group.colors'));
     const chips = [...PALETTE, ...Array.from({ length: 10 }, (_, i) => this.customColors[i] || null)];
     chips.forEach((c, i) => {
       const b = document.createElement('button');
       b.className = 'chip';
-      b.dataset.testid = `palette-${i}`;
+      b.dataset.testid = `${prefix}-${i}`;
       if (c) {
         b.style.background = c;
         b.dataset.color = c;
-        b.title = c.toUpperCase();
-        const lum = parseInt(c.slice(1, 3), 16) + parseInt(c.slice(3, 5), 16) + parseInt(c.slice(5, 7), 16);
-        if (lum > 690) b.classList.add('light');
-        b.addEventListener('click', () => this.setColor(c));
+        const name = i < PALETTE.length ? t(`color.name.${i}`) : t('color.custom');
+        b.title = `${name} (${c.toUpperCase()})`;
+        b.setAttribute('aria-label', name);
+        b.addEventListener('click', () => {
+          this.popups.close();
+          this.setColor(c);
+        });
         b.addEventListener('contextmenu', (e) => {
           e.preventDefault();
           this.setColor(c, 2);
@@ -357,10 +436,15 @@ export class App {
       } else {
         b.classList.add('empty');
         b.title = t('color.custom');
-        b.addEventListener('click', () => this.editColor());
+        b.setAttribute('aria-label', t('color.custom'));
+        b.addEventListener('click', () => {
+          this.popups.close();
+          this.editColor();
+        });
       }
       pal.appendChild(b);
     });
+    return pal;
   }
 
   async editColor() {
@@ -407,8 +491,8 @@ export class App {
           { sep: true },
           { label: t('edit.selectAll'), key: 'Ctrl+A', icon: 'selectAll', run: c('edit.selectAll'), testid: 'mi-select-all' },
           { label: t('edit.invert'), icon: 'invert', run: c('edit.invert'), testid: 'mi-invert' },
-          { label: t('edit.delete'), key: 'Suppr', icon: 'trash', run: c('edit.delete'), disabled: !hasSel, testid: 'mi-delete' },
-          { label: t('image.crop'), key: 'Ctrl+Maj+X', icon: 'crop', run: c('image.crop'), disabled: !hasSel, testid: 'mi-crop' },
+          { label: t('edit.delete'), key: t('key.del'), icon: 'trash', run: c('edit.delete'), disabled: !hasSel, testid: 'mi-delete' },
+          { label: t('image.crop'), key: t('key.crop'), icon: 'crop', run: c('image.crop'), disabled: !hasSel, testid: 'mi-crop' },
         ];
       case 'view':
         return [
@@ -428,24 +512,24 @@ export class App {
           {
             label: t('settings.theme'),
             testid: 'mi-theme',
-            items: ['system', 'light', 'dark'].map((th) => ({ label: t(`settings.theme.${th}`), checked: this.theme === th, run: () => this.applyTheme(th), testid: `mi-theme-${th}` })),
+            items: ['system', 'light', 'dark'].map((th) => ({ label: t(`settings.theme.${th}`), checked: this.theme === th, radio: true, run: () => this.applyTheme(th), testid: `mi-theme-${th}` })),
           },
           {
             label: t('settings.language'),
             testid: 'mi-language',
-            items: [['fr', 'Français'], ['en', 'English']].map(([l, n]) => ({ label: n, checked: language() === l, run: () => this.switchLanguage(l), testid: `mi-lang-${l}` })),
+            items: [['fr', 'Français'], ['en', 'English']].map(([l, n]) => ({ label: n, checked: language() === l, radio: true, run: () => this.switchLanguage(l), testid: `mi-lang-${l}` })),
           },
           { sep: true },
           { label: t('settings.about'), run: c('settings.about'), testid: 'mi-about' },
         ];
       case 'selection':
         return [
-          { label: t('sel.rect'), icon: 'selectRect', run: () => this.selectTool('select-rect'), testid: 'mi-select-rect' },
-          { label: t('sel.free'), icon: 'selectFree', run: () => this.selectTool('select-free'), testid: 'mi-select-free' },
+          { label: t('sel.rect'), icon: 'selectRect', checked: st.tool === 'select-rect', radio: true, run: () => this.selectTool('select-rect'), testid: 'mi-select-rect' },
+          { label: t('sel.free'), icon: 'selectFree', checked: st.tool === 'select-free', radio: true, run: () => this.selectTool('select-free'), testid: 'mi-select-free' },
           { sep: true },
           { label: t('edit.selectAll'), key: 'Ctrl+A', icon: 'selectAll', run: c('edit.selectAll'), testid: 'mi-sel-all' },
           { label: t('edit.invert'), icon: 'invert', run: c('edit.invert'), testid: 'mi-sel-invert' },
-          { label: t('edit.delete'), key: 'Suppr', icon: 'trash', run: c('edit.delete'), disabled: !hasSel, testid: 'mi-sel-delete' },
+          { label: t('edit.delete'), key: t('key.del'), icon: 'trash', run: c('edit.delete'), disabled: !hasSel, testid: 'mi-sel-delete' },
           { sep: true },
           {
             label: t('sel.transparent'),
@@ -469,27 +553,41 @@ export class App {
           { label: t('image.flipH'), icon: 'flip', run: c('image.flipH'), testid: 'mi-flip-h' },
         ];
       case 'brushes':
-        return [{ element: this.gallery('brushes', BRUSHES, (k) => brushPreview(Engine, this.wasm, k), (k) => this.setBrush(k), st.tool === 'brush' ? st.brush : null) }];
+        return [{ element: this.gallery('brushes', BRUSHES, (k) => brushPreview(Engine, this.wasm, k), (k) => this.setBrush(k), st.tool === 'brush' ? st.brush : null, st.brush) }];
       case 'shapes':
         return [
-          { element: this.gallery('shapes', SHAPES, (k) => shapePreview(Engine, this.wasm, k), (k) => this.setShape(k), st.tool === 'shape' ? st.shape : null) },
+          { element: this.gallery('shapes', SHAPES, (k) => shapePreview(Engine, this.wasm, k), (k) => this.setShape(k), st.tool === 'shape' ? st.shape : null, st.shape) },
           { sep: true },
           { title: t('shape.outline') },
-          ...['none', 'solid'].map((o) => ({ label: t(`style.${o}`), checked: st.outline === o, run: () => this.setStyle('outline', o), testid: `mi-outline-${o}` })),
+          ...['none', 'solid'].map((o) => ({ label: t(`style.${o}`), icon: o === 'solid' ? 'outline' : 'close', checked: st.outline === o, radio: true, run: () => this.setStyle('outline', o), testid: `mi-outline-${o}` })),
           { title: t('shape.fill') },
-          ...['none', 'solid'].map((o) => ({ label: t(`style.${o}`), checked: st.fill === o, run: () => this.setStyle('fill', o), testid: `mi-fill-${o}` })),
+          ...['none', 'solid'].map((o) => ({ label: t(`style.${o}`), icon: o === 'solid' ? 'fillStyle' : 'close', checked: st.fill === o, radio: true, run: () => this.setStyle('fill', o), testid: `mi-fill-${o}` })),
         ];
       case 'size':
         return [{ element: this.sizePanel() }];
       case 'zoom':
-        return [...ZOOM_PRESETS].reverse().map((z) => ({ label: `${z * 100}%`, run: () => this.view.setZoom(z), testid: `mi-zoom-${z * 100}` })).concat([{ sep: true }, { label: t('view.fit'), run: c('view.fit') }]);
+        return [...ZOOM_PRESETS]
+          .reverse()
+          .map((z) => ({ label: `${z * 100}%`, checked: Math.abs(z - this.view.zoom) < 1e-6, radio: true, run: () => this.view.setZoom(z), testid: `mi-zoom-${z * 100}` }))
+          .concat([{ sep: true }, { label: t('view.fit'), run: c('view.fit') }]);
+      case 'colors':
+        return [{ element: this.buildPalette(document.createElement('div'), 'menu-palette') }, { sep: true }, { label: t('color.edit'), icon: 'plus', run: c('color.edit'), testid: 'mi-edit-colors' }];
+      case 'image':
+        return [
+          { label: t('image.crop'), icon: 'crop', key: t('key.crop'), run: c('image.crop'), disabled: !hasSel, testid: 'mi-image-crop' },
+          { label: t('image.resize'), icon: 'resize', key: 'Ctrl+W', run: c('image.resize'), testid: 'mi-image-resize' },
+          { label: t('image.rotate'), icon: 'rotate', items: this.menuItems('rotate'), testid: 'mi-image-rotate' },
+          { label: t('image.flip'), icon: 'flip', items: this.menuItems('flip'), testid: 'mi-image-flip' },
+          { label: t('image.removeBg'), icon: 'removeBg', run: c('image.removeBg'), testid: 'mi-image-remove-bg' },
+        ];
       default:
         return [];
     }
   }
 
-  openMenu(name, anchor) {
-    this.popups.open(anchor, this.menuItems(name), { testid: `popup-${name}` });
+  openMenu(name, anchor, keyboard = false) {
+    const label = anchor.getAttribute('aria-label') || anchor.textContent.trim();
+    this.popups.open(anchor, this.menuItems(name), { testid: `popup-${name}`, label, noIcons: name === 'zoom', keyboard });
   }
 
   selectTool(name) {
@@ -503,7 +601,7 @@ export class App {
     this.changed();
   }
 
-  gallery(kind, names, preview, pick, active) {
+  gallery(kind, names, preview, pick, active, current = active) {
     this.previewCache = this.previewCache || {};
     const el = document.createElement('div');
     el.className = `gallery ${kind}`;
@@ -512,6 +610,7 @@ export class App {
       b.title = t(`${kind === 'brushes' ? 'brush' : 'shape'}.${name}`);
       b.dataset.testid = `${kind === 'brushes' ? 'brush' : 'shape'}-${name}`;
       b.classList.toggle('active', name === active);
+      if (name === current) b.dataset.current = 'true';
       const key = `${kind}:${name}`;
       if (!this.previewCache[key]) this.previewCache[key] = preview(name);
       const cv = this.previewCache[key];
@@ -568,14 +667,14 @@ export class App {
         { label: t('edit.copy'), icon: 'copy', key: 'Ctrl+C', run: c('edit.copy'), disabled: !hasSel, testid: 'ctx-copy' },
         { label: t('edit.paste'), icon: 'paste', key: 'Ctrl+V', run: c('edit.paste'), testid: 'ctx-paste' },
         { sep: true },
-        { label: t('image.crop'), icon: 'crop', run: c('image.crop'), disabled: !hasSel, testid: 'ctx-crop' },
-        { label: t('edit.selectAll'), icon: 'selectAll', run: c('edit.selectAll'), testid: 'ctx-select-all' },
+        { label: t('image.crop'), icon: 'crop', key: t('key.crop'), run: c('image.crop'), disabled: !hasSel, testid: 'ctx-crop' },
+        { label: t('edit.selectAll'), icon: 'selectAll', key: 'Ctrl+A', run: c('edit.selectAll'), testid: 'ctx-select-all' },
         { label: t('edit.invert'), icon: 'invert', run: c('edit.invert'), testid: 'ctx-invert' },
-        { label: t('edit.delete'), icon: 'trash', run: c('edit.delete'), disabled: !hasSel, testid: 'ctx-delete' },
+        { label: t('edit.delete'), icon: 'trash', key: t('key.del'), run: c('edit.delete'), disabled: !hasSel, testid: 'ctx-delete' },
         { sep: true },
         { label: t('image.rotate'), icon: 'rotate', items: this.menuItems('rotate'), testid: 'ctx-rotate' },
         { label: t('image.flip'), icon: 'flip', items: this.menuItems('flip'), testid: 'ctx-flip' },
-        { label: t('image.resize'), icon: 'resize', run: c('image.resize'), testid: 'ctx-resize' },
+        { label: t('image.resize'), icon: 'resize', key: 'Ctrl+W', run: c('image.resize'), testid: 'ctx-resize' },
       ],
       { testid: 'popup-context' },
     );
@@ -593,12 +692,21 @@ export class App {
   // ----- keyboard ----------------------------------------------------------------
 
   bindKeyboard() {
+    // File and view shortcuts that also work while typing in the text box.
+    const global = new Set(['C-s', 'C-S-s', 'F12', 'C-o', 'C-n', 'C-p', 'F11']);
     document.addEventListener('keydown', (e) => {
       const target = e.target;
-      if (target.closest && target.closest('input, textarea, select, dialog')) return;
+      // Nothing reaches the picture while a modal dialog is open.
+      if (document.querySelector('dialog[open]')) return;
       const ctrl = e.ctrlKey || e.metaKey;
-      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      // Digits and +/- by physical key, so AZERTY keyboards work (Ctrl+0 is Ctrl+à there).
+      const byCode = { Digit0: '0', Numpad0: '0', Digit1: '1', Numpad1: '1', Equal: '=', NumpadAdd: '+', Minus: '-', NumpadSubtract: '-' };
+      const k = ctrl && byCode[e.code] ? byCode[e.code] : e.key.length === 1 ? e.key.toLowerCase() : e.key;
       const combo = `${ctrl ? 'C-' : ''}${e.shiftKey ? 'S-' : ''}${e.altKey ? 'A-' : ''}${k}`;
+      const typing = target.closest && target.closest('input, textarea, select');
+      if (typing && !(target === this.text.box && global.has(combo))) return;
+      // A focused toolbar button keeps its native Enter/Space activation.
+      if ((e.key === 'Enter' || e.key === ' ') && target.closest && target.closest('button')) return;
       const map = {
         'C-n': 'file.new',
         'C-o': 'file.open',
@@ -640,11 +748,15 @@ export class App {
       const id = map[combo];
       if (id) {
         e.preventDefault();
+        this.popups.close();
         this.run(id);
         return;
       }
+      if (this.popups.isOpen) return;
       const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-      if (arrows[e.key] && this.state.selection && !this.state.selection.drawing) {
+      const st = this.state;
+      const movable = (st.selection && !st.selection.drawing) || (st.shape_edit && st.shape_edit.stage === 'editing');
+      if (arrows[e.key] && movable && !target.closest('button, [role=toolbar]')) {
         e.preventDefault();
         const [dx, dy] = arrows[e.key];
         const step = e.shiftKey ? 10 : 1;
@@ -653,6 +765,7 @@ export class App {
         return;
       }
       if (e.key === 'Escape') {
+        if (this.view.cancelCanvasResize()) return;
         this.engine.escape();
         this.changed({ layers: true });
       } else if (e.key === 'Enter') {
@@ -668,6 +781,7 @@ export class App {
     document.addEventListener('paste', (e) => {
       if (platform.isDesktop) return;
       if (e.target.closest && e.target.closest('input, textarea')) return;
+      if (document.querySelector('dialog[open]')) return;
       e.preventDefault();
       const items = [...(e.clipboardData ? e.clipboardData.items : [])];
       const item = items.find((i) => i.kind === 'file' && i.type.startsWith('image/'));
@@ -725,11 +839,12 @@ export class App {
   }
 
   pasteBytes(bytes) {
+    this.commitTransient();
     const o = this.view.visibleOrigin();
     try {
       this.engine.paste_bytes(bytes, o.x, o.y);
     } catch (err) {
-      this.toast(t('msg.openFailed', { error: String(err) }));
+      this.toast(String(err).includes('too large') ? t('msg.tooLarge') : t('msg.openFailed', { error: String(err) }));
       return false;
     }
     this.lastSelectTool = 'select-rect';
@@ -799,6 +914,15 @@ export class App {
     } catch (err) {
       console.warn(err);
     }
+    // Installed web app opened from the file manager ("Open with Paint").
+    if ('launchQueue' in window) {
+      window.launchQueue.setConsumer(async (params) => {
+        const handle = params.files && params.files[0];
+        if (!handle) return;
+        const file = await handle.getFile();
+        if (await this.confirmDiscard()) this.loadFile({ name: file.name, path: null, bytes: new Uint8Array(await file.arrayBuffer()) });
+      });
+    }
   }
 
   /** Saves to the current file (or asks for one). Resolves true when saved. */
@@ -815,13 +939,29 @@ export class App {
   }
 
   async write(format, path, name) {
+    // Holding Ctrl+S must not start overlapping saves of the same file.
+    if (this.saving) return this.saving;
+    this.saving = this.writeNow(format, path, name).finally(() => {
+      this.saving = null;
+    });
+    return this.saving;
+  }
+
+  async writeNow(format, path, name) {
     this.commitTransient();
     let bytes;
     try {
-      bytes = this.engine.export(format.ext, 92);
-      const res = await platform.saveBytes(bytes, name, format, path);
+      let target = path;
+      if (platform.isDesktop && !target) {
+        target = await platform.chooseSavePath(name, format);
+        if (!target) return false;
+      }
+      // The extension typed in the file dialog decides the format.
+      const fmt = (target && platform.formatOf(target)) || format;
+      bytes = this.engine.export(fmt.ext, 92);
+      const res = await platform.saveBytes(bytes, name, fmt, target);
       if (!res) return false;
-      this.file = { name: res.name, path: res.path, format: platform.formatOf(res.name) || format, size: bytes.length };
+      this.file = { name: res.name, path: res.path, format: fmt, size: bytes.length };
     } catch (err) {
       await message(t('dlg.error'), t('msg.saveFailed', { error: String(err) }));
       return false;
@@ -863,8 +1003,8 @@ export class App {
     const base = sel && !sel.drawing ? { w: sel.w, h: sel.h } : { w: this.state.width, h: this.state.height };
     const r = await resizeDialog(base);
     if (!r) return;
-    if (r.w !== base.w || r.h !== base.h) this.engine.resize_image(r.w, r.h);
-    if (r.sx || r.sy) this.engine.skew(r.sx, r.sy);
+    if (r.w !== base.w || r.h !== base.h) this.sizeChecked(this.engine.resize_image(r.w, r.h));
+    if (r.sx || r.sy) this.sizeChecked(this.engine.skew(r.sx, r.sy));
     this.changed({ layers: true });
   }
 
@@ -872,7 +1012,7 @@ export class App {
     this.commitTransient();
     const r = await propertiesDialog(this.state.width, this.state.height);
     if (!r) return;
-    this.engine.resize_canvas(r.w, r.h);
+    this.sizeChecked(this.engine.resize_canvas(r.w, r.h));
     this.changed({ layers: true });
   }
 }

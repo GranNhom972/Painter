@@ -4,32 +4,53 @@ use crate::color::Rgba;
 use crate::geom::IRect;
 use crate::image::{Image, Mask};
 
-/// Pixels 4-connected to the seeds whose colour is within `tolerance` of `target`,
-/// restricted to `area`.
-pub fn region(img: &Image, seeds: &[(i32, i32)], target: Rgba, tolerance: u8, area: IRect) -> Mask {
+/// Pixels 4-connected to the seeds whose colour is within `tolerance` of `target`
+/// (largest channel difference, alpha included), restricted to `area`.
+/// Returns an image-sized mask and the bounding box of the region.
+/// `allowed` (image-sized) restricts the region further (free-form selections).
+pub fn region(img: &Image, seeds: &[(i32, i32)], target: Rgba, tolerance: u8, area: IRect, allowed: Option<&Mask>) -> (Mask, Option<IRect>) {
     let area = area.clamp_to(img.width(), img.height());
-    let mut mask = Mask::new(img.width(), img.height());
-    let matches = |x: i32, y: i32, mask: &Mask| area.contains(x, y) && mask.get(x, y) == 0 && img.get(x, y).distance(target) <= tolerance;
-    let mut stack: Vec<(i32, i32)> = seeds.iter().copied().filter(|&(x, y)| matches(x, y, &mask)).collect();
+    let w = img.width() as usize;
+    let data = img.data();
+    let t = target.to_array();
+    let mut seen = vec![0u8; w * img.height() as usize];
+    let ok = |i: usize| {
+        let p = &data[i * 4..i * 4 + 4];
+        p[0].abs_diff(t[0]) <= tolerance
+            && p[1].abs_diff(t[1]) <= tolerance
+            && p[2].abs_diff(t[2]) <= tolerance
+            && p[3].abs_diff(t[3]) <= tolerance
+            && allowed.is_none_or(|m| m.data()[i] >= 128)
+    };
+    let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+    let mut stack: Vec<(i32, i32)> = seeds.iter().copied().filter(|&(x, y)| area.contains(x, y)).collect();
     while let Some((x, y)) = stack.pop() {
-        if !matches(x, y, &mask) {
+        let row = y as usize * w;
+        if seen[row + x as usize] != 0 || !ok(row + x as usize) {
             continue;
         }
         let mut l = x;
-        while matches(l - 1, y, &mask) {
+        while l > area.x && seen[row + l as usize - 1] == 0 && ok(row + l as usize - 1) {
             l -= 1;
         }
         let mut r = x;
-        while matches(r + 1, y, &mask) {
+        while r + 1 < area.right() && seen[row + r as usize + 1] == 0 && ok(row + r as usize + 1) {
             r += 1;
         }
-        for i in l..=r {
-            mask.set(i, y, 255);
-        }
+        seen[row + l as usize..=row + r as usize].fill(255);
+        x0 = x0.min(l);
+        x1 = x1.max(r);
+        y0 = y0.min(y);
+        y1 = y1.max(y);
         for ny in [y - 1, y + 1] {
+            if ny < area.y || ny >= area.bottom() {
+                continue;
+            }
+            let nrow = ny as usize * w;
             let mut in_span = false;
             for i in l..=r {
-                if matches(i, ny, &mask) {
+                let k = nrow + i as usize;
+                if seen[k] == 0 && ok(k) {
                     if !in_span {
                         stack.push((i, ny));
                         in_span = true;
@@ -40,7 +61,8 @@ pub fn region(img: &Image, seeds: &[(i32, i32)], target: Rgba, tolerance: u8, ar
             }
         }
     }
-    mask
+    let bbox = (x0 <= x1).then(|| IRect::new(x0, y0, x1 - x0 + 1, y1 - y0 + 1));
+    (Mask::from_raw(img.width(), img.height(), seen), bbox)
 }
 
 /// Paint-bucket fill at (x, y). Returns the modified rectangle (empty if nothing changed).
@@ -52,15 +74,15 @@ pub fn flood_fill(img: &mut Image, x: i32, y: i32, color: Rgba, tolerance: u8) -
     if target == color && tolerance == 0 {
         return IRect::default();
     }
-    let m = region(img, &[(x, y)], target, tolerance, img.bounds());
-    let Some(bbox) = m.bbox() else { return IRect::default() };
-    img.fill_masked(0, 0, &m, color);
+    let (m, bbox) = region(img, &[(x, y)], target, tolerance, img.bounds(), None);
+    let Some(bbox) = bbox else { return IRect::default() };
+    img.fill_masked_rect(&m, bbox, color);
     bbox
 }
 
 /// Makes the background transparent: the region connected to the border of `area`
 /// whose colour matches the most frequent border colour.
-pub fn remove_background(img: &mut Image, area: IRect, tolerance: u8) -> IRect {
+pub fn remove_background(img: &mut Image, area: IRect, tolerance: u8, allowed: Option<&Mask>) -> IRect {
     let area = area.clamp_to(img.width(), img.height());
     if area.is_empty() {
         return area;
@@ -75,6 +97,8 @@ pub fn remove_background(img: &mut Image, area: IRect, tolerance: u8) -> IRect {
         border.push((area.right() - 1, y));
     }
     let mut counts: std::collections::HashMap<Rgba, usize> = Default::default();
+    let w = img.width() as usize;
+    border.retain(|&(x, y)| allowed.is_none_or(|m| m.data()[y as usize * w + x as usize] >= 128));
     for &(x, y) in &border {
         *counts.entry(img.get(x, y)).or_default() += 1;
     }
@@ -82,9 +106,9 @@ pub fn remove_background(img: &mut Image, area: IRect, tolerance: u8) -> IRect {
     if target.a == 0 {
         return IRect::default();
     }
-    let m = region(img, &border, target, tolerance, area);
-    let Some(bbox) = m.bbox() else { return IRect::default() };
-    img.fill_masked(0, 0, &m, Rgba::TRANSPARENT);
+    let (m, bbox) = region(img, &border, target, tolerance, area, allowed);
+    let Some(bbox) = bbox else { return IRect::default() };
+    img.fill_masked_rect(&m, bbox, Rgba::TRANSPARENT);
     bbox
 }
 
@@ -140,13 +164,13 @@ mod tests {
     fn background_removal() {
         let mut img = framed();
         img.set(4, 4, Rgba::rgb(9, 9, 9));
-        let r = remove_background(&mut img, IRect::new(0, 0, 10, 10), 16);
+        let r = remove_background(&mut img, IRect::new(0, 0, 10, 10), 16, None);
         assert_eq!(r, IRect::new(0, 0, 10, 10));
         assert_eq!(img.get(0, 0).a, 0);
         assert_eq!(img.get(2, 2), Rgba::BLACK);
         // The inside is not connected to the border: kept.
         assert_eq!(img.get(5, 5), Rgba::WHITE);
         // Nothing left to remove on a transparent border.
-        assert!(remove_background(&mut img, IRect::new(0, 0, 10, 10), 16).is_empty());
+        assert!(remove_background(&mut img, IRect::new(0, 0, 10, 10), 16, None).is_empty());
     }
 }

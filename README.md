@@ -44,6 +44,20 @@ L'interface se contente de lui transmettre les événements de pointeur et les c
 - **Fichiers** : ouvrir, enregistrer, enregistrer sous (7 formats), imprimer, glisser-déposer,
   confirmation des modifications non enregistrées (y compris à la fermeture).
 
+## Lancer Paint
+
+```bash
+./run --web        # version web : compile le moteur WASM, sert l'appli et ouvre le navigateur
+./run --linux      # application de bureau Linux (ajouter --release pour la version optimisée)
+```
+
+Autres modes : `./run --package` (paquets .deb/.rpm/AppImage), `./run --web-build [dossier]`
+(site statique à héberger), `./run --test` (toutes les suites de tests), `./run --help`.
+`./run --web --host 0.0.0.0 --port 8080` rend la version web accessible sur le réseau local.
+
+La version web est une application installable (PWA) : bouton « Installer » du navigateur.
+Une fois chargée, elle fonctionne hors ligne. Elle s'ouvre aussi avec « Ouvrir avec » pour les images.
+
 ## Installation sous Linux
 
 Après la compilation (voir ci-dessous), les paquets sont dans `target/release/bundle/` :
@@ -80,11 +94,23 @@ Sous Windows et macOS, `npm run build` produit les installateurs natifs (MSI/NSI
 
 | Suite | Commande | Contenu |
 |---|---|---|
-| Moteur (Rust) | `cargo test -p paint-core` | 154 tests : chaque outil, chaque pinceau et chaque forme, toute la sélection, le presse-papiers, l'historique, les calques et les formats |
+| Moteur (Rust) | `cargo test -p paint-core` | 183 tests : chaque outil, chaque pinceau et chaque forme, toute la sélection, le presse-papiers, l'historique, les calques, les formats, et 26 tests de non-régression issus des audits |
 | Moteur en WebAssembly | `npm run test:wasm` | l'API compilée en WASM, exécutée dans Node |
-| Interface (navigateur) | `npm run build:wasm && npm run test:e2e` | 69 tests Playwright qui pilotent l'interface réelle : boutons, menus, raccourcis, sélection à la souris, presse-papiers système, fichiers, calques |
-| Bureau (natif) | `cargo test -p paint` | fichiers, ligne de commande, presse-papiers GTK contre un vrai serveur X (copier vers une autre application et coller depuis une autre application) |
-| Application de bureau | `scripts/test-desktop.sh` | 7 tests WebDriver sur l'application Tauri réelle (WebKitGTK) : souris, clavier, presse-papiers natif, enregistrement et ouverture, confirmation à la fermeture |
+| Interface (navigateur) | `npm run build:wasm && npm run test:e2e` | 99 tests Playwright qui pilotent l'interface réelle : boutons, menus, raccourcis (clavier AZERTY compris), navigation au clavier, fenêtres étroites, tactile, sélection à la souris, presse-papiers système, fichiers, calques, mode hors ligne |
+| Bureau (natif) | `cargo test -p paint` | fichiers (enregistrements simultanés, permissions, liens), ligne de commande, presse-papiers GTK contre un vrai serveur X (copier vers une autre application et coller depuis une autre application) |
+| Application de bureau | `scripts/test-desktop.sh` | 8 tests WebDriver sur l'application Tauri réelle (WebKitGTK) : souris, clavier, presse-papiers natif, enregistrement et ouverture, format d'après l'extension, confirmation à la fermeture |
+
+`./run --test` lance toutes ces suites. `cargo run --release -p paint-core --example bench` mesure les
+opérations interactives sur une image de 12 mégapixels.
+
+## Limites
+
+- Taille maximale d'une image : 16 384 pixels par côté et 64 mégapixels. Les opérations qui
+  dépasseraient ces limites sont refusées avec un message, au lieu de saturer la mémoire.
+- Version web : les navigateurs réservent Ctrl+N et Ctrl+W ; utilisez les menus
+  Fichier › Nouveau et Image › Redimensionner.
+- La zone de texte ne se déplace pas et ne fait pas de retour à la ligne automatique (Entrée
+  pour aller à la ligne).
 
 Les tests du presse-papiers GTK et de l'application de bureau ont besoin d'un affichage :
 `DISPLAY` est utilisé s'il est défini, sinon `scripts/test-desktop.sh` démarre Xvfb.

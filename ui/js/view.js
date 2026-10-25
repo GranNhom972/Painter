@@ -51,7 +51,11 @@ export class View {
     vp.addEventListener('pointerdown', (e) => this.onPointerDown(e));
     vp.addEventListener('pointermove', (e) => this.onPointerMove(e));
     vp.addEventListener('pointerup', (e) => this.onPointerUp(e));
-    vp.addEventListener('pointercancel', (e) => this.onPointerUp(e));
+    // A cancelled pointer (touch scroll, lost capture) ends strokes but never
+    // applies a canvas resize.
+    vp.addEventListener('pointercancel', (e) => {
+      if (!this.cancelCanvasResize()) this.onPointerUp(e);
+    });
     vp.addEventListener('pointerleave', () => {
       if (!this.dragging && !this.canvasDrag) {
         this.pointer = null;
@@ -178,33 +182,43 @@ export class View {
     if (this.showRulers) this.drawRulers();
   }
 
+  /** Theme accent colour, for handles and previews drawn on the overlay. */
+  accent() {
+    return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#005fb8';
+  }
+
   drawGrid(ctx) {
     const w = this.engine.width();
     const h = this.engine.height();
-    const step = this.zoom >= 4 ? 1 : this.zoom >= 1 ? 10 : 50;
+    // At least 8 screen pixels between lines; every 10th line is stronger.
+    const step = [1, 2, 5, 10, 20, 50, 100].find((s) => s * this.zoom >= 8) || 100;
     const a = this.toOverlay(0, 0);
     const b = this.toOverlay(w, h);
     const vw = this.viewport.clientWidth;
     const vh = this.viewport.clientHeight;
     ctx.save();
-    ctx.strokeStyle = 'rgba(128,128,140,.45)';
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    const x0 = Math.max(0, Math.floor((0 - a.x) / this.zoom / step) * step);
-    for (let x = x0; x <= w; x += step) {
-      const sx = Math.round(a.x + x * this.zoom) + 0.5;
-      if (sx > vw) break;
-      ctx.moveTo(sx, Math.max(0, a.y));
-      ctx.lineTo(sx, Math.min(vh, b.y));
+    for (const major of [false, true]) {
+      ctx.strokeStyle = major ? 'rgba(128,128,140,.5)' : 'rgba(128,128,140,.28)';
+      ctx.beginPath();
+      const x0 = Math.max(0, Math.floor((0 - a.x) / this.zoom / step) * step);
+      for (let x = x0; x <= w; x += step) {
+        if ((x % (step * 10) === 0) !== major) continue;
+        const sx = Math.round(a.x + x * this.zoom) + 0.5;
+        if (sx > vw) break;
+        ctx.moveTo(sx, Math.max(0, a.y));
+        ctx.lineTo(sx, Math.min(vh, b.y));
+      }
+      const y0 = Math.max(0, Math.floor((0 - a.y) / this.zoom / step) * step);
+      for (let y = y0; y <= h; y += step) {
+        if ((y % (step * 10) === 0) !== major) continue;
+        const sy = Math.round(a.y + y * this.zoom) + 0.5;
+        if (sy > vh) break;
+        ctx.moveTo(Math.max(0, a.x), sy);
+        ctx.lineTo(Math.min(vw, b.x), sy);
+      }
+      ctx.stroke();
     }
-    const y0 = Math.max(0, Math.floor((0 - a.y) / this.zoom / step) * step);
-    for (let y = y0; y <= h; y += step) {
-      const sy = Math.round(a.y + y * this.zoom) + 0.5;
-      if (sy > vh) break;
-      ctx.moveTo(Math.max(0, a.x), sy);
-      ctx.lineTo(Math.min(vw, b.x), sy);
-    }
-    ctx.stroke();
     ctx.restore();
   }
 
@@ -236,7 +250,7 @@ export class View {
     else ctx.rect(Math.round(p.x) - 3.5, Math.round(p.y) - 3.5, 7, 7);
     ctx.fillStyle = '#ffffff';
     ctx.fill();
-    ctx.strokeStyle = '#005fb8';
+    ctx.strokeStyle = this.accent();
     ctx.lineWidth = 1;
     ctx.stroke();
   }
@@ -320,7 +334,7 @@ export class View {
     const a = this.toOverlay(-d.ox, -d.oy);
     ctx.save();
     ctx.setLineDash([4, 3]);
-    ctx.strokeStyle = '#005fb8';
+    ctx.strokeStyle = this.accent();
     ctx.lineWidth = 1;
     ctx.strokeRect(Math.round(a.x) + 0.5, Math.round(a.y) + 0.5, d.w * this.zoom, d.h * this.zoom);
     ctx.restore();
@@ -338,7 +352,7 @@ export class View {
       ctx.fillStyle = css.getPropertyValue('--ruler-bg');
       ctx.fillRect(0, 0, horizontal ? len : 20, horizontal ? 20 : len);
       ctx.strokeStyle = ctx.fillStyle = css.getPropertyValue('--ruler-text');
-      ctx.font = '9px sans-serif';
+      ctx.font = `10px ${css.getPropertyValue('--font')}`;
       const origin = this.toOverlay(0, 0);
       const start = horizontal ? origin.x : origin.y;
       const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
@@ -372,7 +386,7 @@ export class View {
       ctx.stroke();
       if (this.pointer) {
         const p = start + (horizontal ? this.pointer.x : this.pointer.y) * this.zoom;
-        ctx.strokeStyle = '#005fb8';
+        ctx.strokeStyle = this.accent();
         ctx.beginPath();
         if (horizontal) {
           ctx.moveTo(p, 0);
@@ -439,7 +453,7 @@ export class View {
   fit() {
     const w = this.engine.width();
     const h = this.engine.height();
-    const z = Math.min((this.viewport.clientWidth - 56) / w, (this.viewport.clientHeight - 40) / h);
+    const z = Math.min((this.viewport.clientWidth - 48) / w, (this.viewport.clientHeight - 48) / h);
     this.setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)));
     this.viewport.scrollLeft = 0;
     this.viewport.scrollTop = 0;
@@ -449,7 +463,7 @@ export class View {
   fitIfLarge() {
     const w = this.engine.width();
     const h = this.engine.height();
-    if (w <= this.viewport.clientWidth - 56 && h <= this.viewport.clientHeight - 40) {
+    if (w <= this.viewport.clientWidth - 48 && h <= this.viewport.clientHeight - 48) {
       this.setZoom(1);
       this.viewport.scrollLeft = 0;
       this.viewport.scrollTop = 0;
@@ -496,6 +510,7 @@ export class View {
     this.pointer = p;
     this.engine.pointer_down(p.x, p.y, e.button, e.shiftKey, e.ctrlKey || e.metaKey, e.altKey);
     if (st.tool === 'brush' && st.brush === 'airbrush') {
+      clearInterval(this.airbrushTimer);
       this.airbrushTimer = setInterval(() => {
         this.engine.tick();
         this.app.changed();
@@ -524,11 +539,42 @@ export class View {
         this.engine.pointer_move(q.x, q.y, e.shiftKey, e.ctrlKey || e.metaKey, e.altKey);
       }
       this.app.changed();
+      this.autoScroll(e);
     } else {
       this.updateCursor();
       const t = this.app.state && this.app.state.tool;
       if (t === 'eraser' || t === 'brush' || this.showRulers) this.drawOverlay();
     }
+  }
+
+  /**
+   * While dragging past the edge of the view, scroll towards the pointer and keep
+   * feeding the engine the pointer position (selections and shapes follow).
+   */
+  autoScroll(e) {
+    this.scrollPointer = { x: e.clientX, y: e.clientY, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey };
+    if (this.scrollTimer) return;
+    const step = () => {
+      const p = this.scrollPointer;
+      const r = this.viewport.getBoundingClientRect();
+      const over = (v, lo, hi) => (v < lo ? v - lo : v > hi ? v - hi : 0);
+      const dx = over(p.x, r.left, r.left + this.viewport.clientWidth);
+      const dy = over(p.y, r.top, r.top + this.viewport.clientHeight);
+      if ((!this.dragging && !this.canvasDrag) || (!dx && !dy)) {
+        this.scrollTimer = null;
+        return;
+      }
+      const speed = (d) => Math.sign(d) * Math.min(40, Math.max(2, Math.abs(d) / 2));
+      this.viewport.scrollLeft += dx ? speed(dx) : 0;
+      this.viewport.scrollTop += dy ? speed(dy) : 0;
+      if (this.dragging) {
+        const q = this.toImage(p.x, p.y);
+        this.engine.pointer_move(q.x, q.y, p.shift, p.ctrl, p.alt);
+        this.app.changed();
+      }
+      this.scrollTimer = requestAnimationFrame(step);
+    };
+    this.scrollTimer = requestAnimationFrame(step);
   }
 
   onPointerUp(e) {
@@ -563,14 +609,20 @@ export class View {
     const w0 = this.engine.width();
     const h0 = this.engine.height();
     this.canvasDrag = { handle: h, x: e.clientX, y: e.clientY, w0, h0, w: w0, h: h0, ox: 0, oy: 0 };
+    const handle = e.target;
     const move = (ev) => this.moveCanvasResize(ev);
-    const up = () => {
-      e.target.removeEventListener('pointermove', move);
-      e.target.removeEventListener('pointerup', up);
-      this.endCanvasResize();
+    const done = (apply) => () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onCancel);
+      if (apply) this.endCanvasResize();
+      else this.cancelCanvasResize();
     };
-    e.target.addEventListener('pointermove', move);
-    e.target.addEventListener('pointerup', up);
+    const onUp = done(true);
+    const onCancel = done(false);
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onCancel);
   }
 
   moveCanvasResize(e) {
@@ -596,11 +648,20 @@ export class View {
     this.drawOverlay();
   }
 
+  /** Drops a canvas-resize drag without applying it (Escape, cancelled pointer). */
+  cancelCanvasResize() {
+    if (!this.canvasDrag) return false;
+    this.canvasDrag = null;
+    this.drawOverlay();
+    this.app.updateCanvasStatus(this.engine.width(), this.engine.height());
+    return true;
+  }
+
   endCanvasResize() {
     const d = this.canvasDrag;
     this.canvasDrag = null;
     if (d && (d.w !== d.w0 || d.h !== d.h0)) {
-      this.engine.resize_canvas_at(d.w, d.h, d.ox, d.oy);
+      this.app.sizeChecked(this.engine.resize_canvas_at(d.w, d.h, d.ox, d.oy));
       this.app.changed({ layers: true });
     } else {
       this.drawOverlay();

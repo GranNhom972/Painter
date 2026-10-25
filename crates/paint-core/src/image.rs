@@ -147,6 +147,22 @@ impl Image {
         }
     }
 
+    /// Replaces the pixels of `r` where the image-sized `mask` is set.
+    pub fn fill_masked_rect(&mut self, mask: &Mask, r: IRect, c: Rgba) {
+        let r = r.clamp_to(self.width, self.height);
+        let p = c.to_array();
+        let w = self.width as usize;
+        for y in r.y..r.bottom() {
+            let row = y as usize * w;
+            for x in r.x..r.right() {
+                if mask.data[row + x as usize] >= 128 {
+                    let i = (row + x as usize) * 4;
+                    self.data[i..i + 4].copy_from_slice(&p);
+                }
+            }
+        }
+    }
+
     /// Copy of the pixels inside `r`; parts outside the image are transparent.
     pub fn sub_image(&self, r: IRect) -> Image {
         let mut out = Image::new(r.w.max(0) as u32, r.h.max(0) as u32);
@@ -270,28 +286,64 @@ impl Image {
         if self.width == 0 || self.height == 0 {
             return Image::new(w, h);
         }
-        // Premultiplied float buffer.
-        let mut pm: Vec<[f32; 4]> = self
-            .data
-            .as_chunks::<4>().0.iter()
-            .map(|p| {
-                let a = p[3] as f32 / 255.0;
-                [p[0] as f32 * a, p[1] as f32 * a, p[2] as f32 * a, p[3] as f32]
-            })
-            .collect();
-        let horiz = resample_axis(&pm, self.width as usize, self.height as usize, w as usize, true);
-        pm = resample_axis(&horiz, w as usize, self.height as usize, h as usize, false);
+        // Streams one output row at a time: memory is one row of the source,
+        // whatever the picture size. Colours are premultiplied by alpha.
+        let (sw, xs, ys) = (self.width as usize, axis_weights(self.width as usize, w as usize), axis_weights(self.height as usize, h as usize));
         let mut out = Image::new(w, h);
-        for (i, p) in pm.iter().enumerate() {
-            let a = p[3].clamp(0.0, 255.0);
-            let px = if a < 0.5 {
-                [0, 0, 0, 0]
-            } else {
-                // Un-premultiply: colour = premultiplied / (alpha / 255).
-                let c = |v: f32| (v * 255.0 / a).round().clamp(0.0, 255.0) as u8;
-                [c(p[0]), c(p[1]), c(p[2]), a.round() as u8]
-            };
-            out.data[i * 4..i * 4 + 4].copy_from_slice(&px);
+        let mut row = vec![[0f32; 4]; sw];
+        for (oy, (y0, wys)) in ys.iter().enumerate() {
+            row.fill([0.0; 4]);
+            for (k, wy) in wys.iter().enumerate() {
+                let src = &self.data[(y0 + k) * sw * 4..(y0 + k + 1) * sw * 4];
+                for (acc, p) in row.iter_mut().zip(src.as_chunks::<4>().0) {
+                    let a = p[3] as f32 / 255.0 * wy;
+                    acc[0] += p[0] as f32 * a;
+                    acc[1] += p[1] as f32 * a;
+                    acc[2] += p[2] as f32 * a;
+                    acc[3] += p[3] as f32 * wy;
+                }
+            }
+            let dst = &mut out.data[oy * w as usize * 4..(oy + 1) * w as usize * 4];
+            for (px, (x0, wxs)) in dst.as_chunks_mut::<4>().0.iter_mut().zip(&xs) {
+                let mut acc = [0f32; 4];
+                for (k, wx) in wxs.iter().enumerate() {
+                    let q = row[x0 + k];
+                    for c in 0..4 {
+                        acc[c] += q[c] * wx;
+                    }
+                }
+                let a = acc[3].clamp(0.0, 255.0);
+                *px = if a < 0.5 {
+                    [0, 0, 0, 0]
+                } else {
+                    // Un-premultiply: colour = premultiplied / (alpha / 255).
+                    let c = |v: f32| (v * 255.0 / a).round().clamp(0.0, 255.0) as u8;
+                    [c(acc[0]), c(acc[1]), c(acc[2]), a.round() as u8]
+                };
+            }
+        }
+        out
+    }
+
+    /// Fast nearest-neighbour resize (live previews while dragging).
+    pub fn resized_nearest(&self, w: u32, h: u32) -> Image {
+        let (w, h) = (w.max(1), h.max(1));
+        if w == self.width && h == self.height {
+            return self.clone();
+        }
+        let mut out = Image::new(w, h);
+        if self.width == 0 || self.height == 0 {
+            return out;
+        }
+        let xs: Vec<usize> = (0..w).map(|x| (((x as u64 * 2 + 1) * self.width as u64) / (w as u64 * 2)) as usize).collect();
+        let row = self.width as usize * 4;
+        for y in 0..h as usize {
+            let sy = ((y as u64 * 2 + 1) * self.height as u64 / (h as u64 * 2)) as usize;
+            let src = &self.data[sy * row..(sy + 1) * row];
+            let dst = &mut out.data[y * w as usize * 4..(y + 1) * w as usize * 4];
+            for (d, &sx) in dst.as_chunks_mut::<4>().0.iter_mut().zip(&xs) {
+                d.copy_from_slice(&src[sx * 4..sx * 4 + 4]);
+            }
         }
         out
     }
@@ -349,11 +401,15 @@ impl Image {
                         b
                     }
                     (Some(a), Some(b)) => {
-                        let mut p = [0u8; 4];
-                        for i in 0..4 {
-                            p[i] = (a[i] as f32 * (1.0 - f) + b[i] as f32 * f).round() as u8;
+                        // Premultiplied interpolation: transparent neighbours must not darken edges.
+                        let (wa, wb) = (a[3] as f32 * (1.0 - f), b[3] as f32 * f);
+                        let alpha = wa + wb;
+                        if alpha < 0.5 {
+                            [0, 0, 0, 0]
+                        } else {
+                            let c = |i: usize| ((a[i] as f32 * wa + b[i] as f32 * wb) / alpha).round().clamp(0.0, 255.0) as u8;
+                            [c(0), c(1), c(2), alpha.round().min(255.0) as u8]
                         }
-                        p
                     }
                 };
                 if horizontal {
@@ -421,54 +477,45 @@ impl Transform {
     pub fn swaps_axes(&self) -> bool {
         matches!(self, Transform::RotateCw | Transform::RotateCcw)
     }
+
+    /// Size of the result for a `w` x `h` input (without computing it).
+    pub fn output_size(&self, w: u32, h: u32) -> (u64, u64) {
+        let (w, h) = (w as u64, h as u64);
+        match *self {
+            Transform::RotateCw | Transform::RotateCcw => (h, w),
+            Transform::Rotate180 | Transform::FlipHorizontal | Transform::FlipVertical => (w, h),
+            Transform::Resize(nw, nh) => (nw.max(1) as u64, nh.max(1) as u64),
+            Transform::Skew(dx, dy) => {
+                let grow = |deg: f32, across: u64| if deg.abs() > 0.01 { (deg.clamp(-89.0, 89.0).to_radians().tan().abs() as f64 * across as f64).ceil() as u64 } else { 0 };
+                let w2 = w + grow(dx, h);
+                let h2 = h + grow(dy, w2);
+                (w2, h2)
+            }
+        }
+    }
 }
 
-/// One-dimensional resampling pass over a premultiplied buffer.
-fn resample_axis(src: &[[f32; 4]], sw: usize, sh: usize, n: usize, horizontal: bool) -> Vec<[f32; 4]> {
-    let len = if horizontal { sw } else { sh };
+/// Triangle-filter weights for each output coordinate: (first source index, weights).
+/// The support widens when shrinking, so it averages like a box filter.
+fn axis_weights(len: usize, n: usize) -> Vec<(usize, Vec<f32>)> {
     let scale = n as f32 / len as f32;
     let support = if scale < 1.0 { 1.0 / scale } else { 1.0 };
-    // Precompute weights per output coordinate.
-    let weights: Vec<(usize, Vec<f32>)> = (0..n)
+    (0..n)
         .map(|o| {
             let center = (o as f32 + 0.5) / scale;
             let lo = ((center - support).floor().max(0.0)) as usize;
             let hi = ((center + support).ceil() as usize).min(len);
-            let mut ws: Vec<f32> = (lo..hi)
-                .map(|i| {
-                    let d = ((i as f32 + 0.5) - center).abs() / support;
-                    (1.0 - d).max(0.0)
-                })
-                .collect();
+            let mut ws: Vec<f32> = (lo..hi).map(|i| (1.0 - ((i as f32 + 0.5) - center).abs() / support).max(0.0)).collect();
             let sum: f32 = ws.iter().sum();
             if sum > 0.0 {
                 ws.iter_mut().for_each(|w| *w /= sum);
+                (lo, ws)
             } else {
                 // Degenerate: nearest sample.
-                let i = (center as usize).min(len - 1);
-                return (i, vec![1.0]);
+                ((center as usize).min(len - 1), vec![1.0])
             }
-            (lo, ws)
         })
-        .collect();
-    let (ow, oh) = if horizontal { (n, sh) } else { (sw, n) };
-    let mut out = vec![[0f32; 4]; ow * oh];
-    for y in 0..oh {
-        for x in 0..ow {
-            let (o, fixed) = if horizontal { (x, y) } else { (y, x) };
-            let (lo, ws) = &weights[o];
-            let mut acc = [0f32; 4];
-            for (k, w) in ws.iter().enumerate() {
-                let i = lo + k;
-                let p = if horizontal { src[fixed * sw + i] } else { src[i * sw + fixed] };
-                for c in 0..4 {
-                    acc[c] += p[c] * w;
-                }
-            }
-            out[y * ow + x] = acc;
-        }
-    }
-    out
+        .collect()
 }
 
 /// 8-bit coverage mask.
@@ -491,6 +538,10 @@ impl Mask {
     }
     pub fn full(width: u32, height: u32) -> Self {
         Mask { width, height, data: vec![255; width as usize * height as usize] }
+    }
+    pub fn from_raw(width: u32, height: u32, data: Vec<u8>) -> Self {
+        assert_eq!(data.len(), width as usize * height as usize, "mask size");
+        Mask { width, height, data }
     }
     pub fn width(&self) -> u32 {
         self.width
@@ -662,6 +713,19 @@ mod tests {
         let r = half.resized(1, 1);
         assert_eq!((r.get(0, 0).r, r.get(0, 0).g), (255, 0));
         assert!((120..=135).contains(&r.get(0, 0).a));
+    }
+
+    #[test]
+    fn nearest_resize_picks_source_pixels() {
+        let img = gradient(4, 2);
+        let big = img.resized_nearest(8, 4);
+        assert_eq!(big.get(0, 0), img.get(0, 0));
+        assert_eq!(big.get(7, 3), img.get(3, 1));
+        assert_eq!(big.get(3, 1), img.get(1, 0));
+        let small = img.resized_nearest(2, 1);
+        assert_eq!((small.width(), small.height()), (2, 1));
+        assert_eq!(small.get(0, 0), img.get(1, 1));
+        assert_eq!(img.resized_nearest(4, 2), img);
     }
 
     #[test]

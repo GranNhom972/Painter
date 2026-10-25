@@ -16,6 +16,8 @@ pub struct State {
 pub struct History {
     undo: VecDeque<(State, usize)>,
     redo: Vec<State>,
+    /// Redo stack cleared by the last push, restored if that push is discarded.
+    cleared_redo: Vec<State>,
     total: usize,
     budget: usize,
     max_steps: usize,
@@ -42,7 +44,7 @@ fn unique_cost(s: &State, prev: Option<&State>) -> usize {
 
 impl History {
     pub fn new(budget: usize, max_steps: usize) -> Self {
-        History { undo: VecDeque::new(), redo: Vec::new(), total: 0, budget, max_steps: max_steps.max(1) }
+        History { undo: VecDeque::new(), redo: Vec::new(), cleared_redo: Vec::new(), total: 0, budget, max_steps: max_steps.max(1) }
     }
 
     /// Records the state *before* a modification. Clears the redo stack.
@@ -50,7 +52,7 @@ impl History {
         let cost = unique_cost(&s, self.undo.back().map(|(s, _)| s));
         self.total += cost;
         self.undo.push_back((s, cost));
-        self.redo.clear();
+        self.cleared_redo = std::mem::take(&mut self.redo);
         while self.undo.len() > 1 && (self.total > self.budget || self.undo.len() > self.max_steps) {
             if let Some((_, c)) = self.undo.pop_front() {
                 self.total -= c;
@@ -59,6 +61,7 @@ impl History {
     }
 
     pub fn undo(&mut self, current: State) -> Option<State> {
+        self.cleared_redo.clear();
         let (prev, cost) = self.undo.pop_back()?;
         self.total -= cost;
         self.redo.push(current);
@@ -66,6 +69,7 @@ impl History {
     }
 
     pub fn redo(&mut self, current: State) -> Option<State> {
+        self.cleared_redo.clear();
         let next = self.redo.pop()?;
         let cost = unique_cost(&current, self.undo.back().map(|(s, _)| s));
         self.total += cost;
@@ -73,10 +77,12 @@ impl History {
         Some(next)
     }
 
-    /// Drops the last recorded state without making it redoable (cancelled operation).
+    /// Drops the last recorded state (an operation that changed nothing in the end).
+    /// The redo stack it had cleared comes back.
     pub fn discard_last(&mut self) -> Option<State> {
         let (s, cost) = self.undo.pop_back()?;
         self.total -= cost;
+        self.redo = std::mem::take(&mut self.cleared_redo);
         Some(s)
     }
 
@@ -92,6 +98,7 @@ impl History {
     pub fn clear(&mut self) {
         self.undo.clear();
         self.redo.clear();
+        self.cleared_redo.clear();
         self.total = 0;
     }
 }

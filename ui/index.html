@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Paint</title>
   <link rel="icon" href="icons/paint.svg">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#f9f9fb">
+  <meta name="description" content="Paint : éditeur d'images, moteur Rust compilé en WebAssembly">
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
@@ -12,7 +15,7 @@
 
   <!-- Menu bar: File / Edit / View, quick access, settings -->
   <header class="menubar">
-    <nav class="menus" role="menubar">
+    <nav class="menus" aria-label="Menus">
       <button class="menu-btn" data-menu="file" data-testid="menu-file" data-i18n="menu.file">Fichier</button>
       <button class="menu-btn" data-menu="edit" data-testid="menu-edit" data-i18n="menu.edit">Édition</button>
       <button class="menu-btn" data-menu="view" data-testid="menu-view" data-i18n="menu.view">Affichage</button>
@@ -26,17 +29,17 @@
   </header>
 
   <!-- Ribbon -->
-  <section class="ribbon" data-testid="ribbon">
-    <div class="group" data-group="selection">
+  <section class="ribbon" id="ribbon" role="toolbar" aria-label="Ruban" data-i18n-label="menu.ribbon" data-testid="ribbon">
+    <div class="group" data-group="selection" role="group" aria-labelledby="glabel-selection">
       <div class="group-body">
         <button class="big-btn split" data-tool="select" data-menu="selection" data-testid="btn-selection" data-i18n-title="group.selection">
           <span class="big-ico" data-icon="selectRect" id="selectionIcon"></span><span data-icon="chevron"></span>
         </button>
       </div>
-      <div class="group-label" data-i18n="group.selection">Sélection</div>
+      <div class="group-label" id="glabel-selection" data-i18n="group.selection">Sélection</div>
     </div>
 
-    <div class="group" data-group="image">
+    <div class="group image-group" data-group="image" role="group" aria-labelledby="glabel-image">
       <div class="group-body grid-2">
         <button class="tool-btn" data-cmd="image.crop" data-icon="crop" data-i18n-title="image.crop" data-testid="btn-crop"></button>
         <button class="tool-btn split" data-menu="rotate" data-i18n-title="image.rotate" data-testid="btn-rotate"><span data-icon="rotate"></span><span data-icon="chevron"></span></button>
@@ -44,10 +47,13 @@
         <button class="tool-btn split" data-menu="flip" data-i18n-title="image.flip" data-testid="btn-flip"><span data-icon="flip"></span><span data-icon="chevron"></span></button>
         <button class="big-btn" data-cmd="image.removeBg" data-i18n-title="image.removeBg" data-testid="btn-remove-bg"><span class="big-ico" data-icon="removeBg"></span></button>
       </div>
-      <div class="group-label" data-i18n="group.image">Image</div>
+      <button class="big-btn split group-more" data-menu="image" data-testid="btn-image-more" data-i18n-title="group.image">
+        <span class="big-ico" data-icon="crop"></span><span data-icon="chevron"></span>
+      </button>
+      <div class="group-label" id="glabel-image" data-i18n="group.image">Image</div>
     </div>
 
-    <div class="group" data-group="tools">
+    <div class="group" data-group="tools" role="group" aria-labelledby="glabel-tools">
       <div class="group-body grid-3">
         <button class="tool-btn" data-tool="pencil" data-icon="pencil" data-i18n-title="tool.pencil" data-testid="tool-pencil"></button>
         <button class="tool-btn" data-tool="fill" data-icon="fill" data-i18n-title="tool.fill" data-testid="tool-fill"></button>
@@ -56,37 +62,37 @@
         <button class="tool-btn" data-tool="picker" data-icon="picker" data-i18n-title="tool.picker" data-testid="tool-picker"></button>
         <button class="tool-btn" data-tool="magnifier" data-icon="magnifier" data-i18n-title="tool.magnifier" data-testid="tool-magnifier"></button>
       </div>
-      <div class="group-label" data-i18n="group.tools">Outils</div>
+      <div class="group-label" id="glabel-tools" data-i18n="group.tools">Outils</div>
     </div>
 
-    <div class="group" data-group="brushes">
+    <div class="group" data-group="brushes" role="group" aria-labelledby="glabel-brushes">
       <div class="group-body">
         <button class="big-btn split" data-tool="brush" data-menu="brushes" data-testid="btn-brushes" data-i18n-title="group.brushes">
           <span class="big-ico" data-icon="brush"></span><span data-icon="chevron"></span>
         </button>
       </div>
-      <div class="group-label" data-i18n="group.brushes">Pinceaux</div>
+      <div class="group-label" id="glabel-brushes" data-i18n="group.brushes">Pinceaux</div>
     </div>
 
-    <div class="group" data-group="shapes">
+    <div class="group" data-group="shapes" role="group" aria-labelledby="glabel-shapes">
       <div class="group-body">
         <button class="big-btn split" data-tool="shape" data-menu="shapes" data-testid="btn-shapes" data-i18n-title="group.shapes">
           <span class="big-ico" data-icon="shapes"></span><span data-icon="chevron"></span>
         </button>
       </div>
-      <div class="group-label" data-i18n="group.shapes">Formes</div>
+      <div class="group-label" id="glabel-shapes" data-i18n="group.shapes">Formes</div>
     </div>
 
-    <div class="group" data-group="size">
+    <div class="group" data-group="size" role="group" aria-labelledby="glabel-size">
       <div class="group-body">
         <button class="big-btn split" data-menu="size" data-testid="btn-size" data-i18n-title="group.size">
           <span class="big-ico" data-icon="size"></span><span data-icon="chevron"></span>
         </button>
       </div>
-      <div class="group-label" data-i18n="group.size">Taille</div>
+      <div class="group-label" id="glabel-size" data-i18n="group.size">Taille</div>
     </div>
 
-    <div class="group colors-group" data-group="colors">
+    <div class="group colors-group" data-group="colors" role="group" aria-labelledby="glabel-colors">
       <div class="group-body colors">
         <div class="active-colors">
           <button class="active-color selected" data-color-slot="1" data-testid="color1" data-i18n-title="color.1"><span class="swatch"></span></button>
@@ -94,15 +100,18 @@
         </div>
         <div class="palette" id="palette" data-testid="palette"></div>
         <button class="edit-colors" data-cmd="color.edit" data-testid="btn-edit-colors" data-i18n-title="color.edit"><span class="rainbow"></span></button>
+        <button class="big-btn split group-more" data-menu="colors" data-testid="btn-colors-more" data-i18n-title="group.colors">
+          <span class="rainbow"></span><span data-icon="chevron"></span>
+        </button>
       </div>
-      <div class="group-label" data-i18n="group.colors">Couleurs</div>
+      <div class="group-label" id="glabel-colors" data-i18n="group.colors">Couleurs</div>
     </div>
 
-    <div class="group" data-group="layers">
+    <div class="group" data-group="layers" role="group" aria-labelledby="glabel-layers">
       <div class="group-body">
         <button class="big-btn" data-cmd="layers.toggle" data-testid="btn-layers" data-i18n-title="group.layers"><span class="big-ico" data-icon="layers"></span></button>
       </div>
-      <div class="group-label" data-i18n="group.layers">Calques</div>
+      <div class="group-label" id="glabel-layers" data-i18n="group.layers">Calques</div>
     </div>
   </section>
 
@@ -161,12 +170,12 @@
 
   <footer class="statusbar" id="statusbar" data-testid="statusbar">
     <span class="stat"><span data-icon="pointer"></span><span id="statPos" data-testid="stat-pos"></span></span>
-    <span class="stat"><span data-icon="selSize"></span><span id="statSel" data-testid="stat-sel"></span></span>
+    <span class="stat optional"><span data-icon="selSize"></span><span id="statSel" data-testid="stat-sel"></span></span>
     <span class="stat"><span data-icon="canvasSize"></span><span id="statCanvas" data-testid="stat-canvas"></span></span>
-    <span class="stat"><span data-icon="disk"></span><span id="statFile" data-testid="stat-file"></span></span>
+    <span class="stat optional"><span data-icon="disk"></span><span id="statFile" data-testid="stat-file"></span></span>
     <span class="spacer"></span>
     <button class="icon-btn small" data-cmd="view.fit" data-icon="fit" data-i18n-title="view.fit" data-testid="zoom-fit"></button>
-    <button class="zoom-value" data-menu="zoom" id="zoomValue" data-testid="zoom-value">100%</button>
+    <button class="zoom-value" data-menu="zoom" data-testid="zoom-value"><span id="zoomValue">100%</span><span data-icon="chevron"></span></button>
     <button class="icon-btn small" data-cmd="view.zoomOut" data-icon="zoomOut" data-i18n-title="view.zoomOut" data-testid="zoom-out"></button>
     <input type="range" id="zoomSlider" class="zoom-slider" min="0" max="1000" value="500" data-testid="zoom-slider" aria-label="Zoom">
     <button class="icon-btn small" data-cmd="view.zoomIn" data-icon="zoomIn" data-i18n-title="view.zoomIn" data-testid="zoom-in"></button>
@@ -198,7 +207,7 @@
     </fieldset>
     <div class="dlg-actions">
       <button value="ok" class="primary" data-i18n="dlg.ok" data-testid="dlg-ok">OK</button>
-      <button value="cancel" data-i18n="dlg.cancel" data-testid="dlg-cancel">Annuler</button>
+      <button value="cancel" formnovalidate data-i18n="dlg.cancel" data-testid="dlg-cancel">Annuler</button>
     </div>
   </form>
 </dialog>
@@ -210,7 +219,7 @@
     <label class="row"><span data-i18n="dlg.props.height">Hauteur :</span><input type="number" name="h" min="1" max="16384" data-testid="props-h"><span data-i18n="dlg.props.units">pixels</span></label>
     <div class="dlg-actions">
       <button value="ok" class="primary" data-i18n="dlg.ok" data-testid="dlg-ok">OK</button>
-      <button value="cancel" data-i18n="dlg.cancel" data-testid="dlg-cancel">Annuler</button>
+      <button value="cancel" formnovalidate data-i18n="dlg.cancel" data-testid="dlg-cancel">Annuler</button>
     </div>
   </form>
 </dialog>
@@ -231,7 +240,7 @@
     </div>
     <div class="dlg-actions">
       <button value="ok" class="primary" data-i18n="dlg.colors.done" data-testid="dlg-ok">Terminé</button>
-      <button value="cancel" data-i18n="dlg.cancel" data-testid="dlg-cancel">Annuler</button>
+      <button value="cancel" formnovalidate data-i18n="dlg.cancel" data-testid="dlg-cancel">Annuler</button>
     </div>
   </form>
 </dialog>
@@ -242,8 +251,8 @@
     <p id="confirmBody"></p>
     <div class="dlg-actions">
       <button value="save" class="primary" data-i18n="dlg.save.save" data-testid="confirm-save">Enregistrer</button>
-      <button value="discard" data-i18n="dlg.save.discard" data-testid="confirm-discard">Ne pas enregistrer</button>
-      <button value="cancel" data-i18n="dlg.cancel" data-testid="confirm-cancel">Annuler</button>
+      <button value="discard" formnovalidate data-i18n="dlg.save.discard" data-testid="confirm-discard">Ne pas enregistrer</button>
+      <button value="cancel" formnovalidate data-i18n="dlg.cancel" data-testid="confirm-cancel">Annuler</button>
     </div>
   </form>
 </dialog>

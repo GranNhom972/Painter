@@ -102,20 +102,28 @@ export function baseName(path) {
   return String(path).split(/[\\/]/).pop();
 }
 
+/** Desktop: asks where to save; returns a path with a known image extension, or null. */
+export async function chooseSavePath(suggestedName, format) {
+  const target = await tauri.dialog.save({
+    defaultPath: suggestedName,
+    filters: [
+      { name: format.name, extensions: [format.ext, ...(format.alias || [])] },
+      { name: 'Images', extensions: allExtensions },
+    ],
+  });
+  if (!target) return null;
+  return formatOf(target) ? target : `${target}.${format.ext}`;
+}
+
 /**
- * Saves bytes. With `path` (desktop) it writes directly; otherwise it asks for
- * a destination. Returns { name, path } or null when cancelled.
+ * Saves bytes: to `path` on the desktop (see chooseSavePath), as a download in
+ * the browser. Returns { name, path } or null when cancelled.
  */
 export async function saveBytes(bytes, suggestedName, format, path = null) {
   if (isDesktop) {
-    let target = path;
-    if (!target) {
-      target = await tauri.dialog.save({ defaultPath: suggestedName, filters: [{ name: format.name, extensions: [format.ext, ...(format.alias || [])] }] });
-      if (!target) return null;
-      if (!formatOf(target)) target += '.' + format.ext;
-    }
-    await invoke('write_file', bytes, { headers: { 'x-path': encodeURIComponent(target) } });
-    return { name: baseName(target), path: target };
+    if (!path) return null;
+    await invoke('write_file', bytes, { headers: { 'x-path': encodeURIComponent(path) } });
+    return { name: baseName(path), path };
   }
   const blob = new Blob([bytes], { type: format.mime });
   const url = URL.createObjectURL(blob);

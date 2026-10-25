@@ -241,8 +241,9 @@ enum Drag {
     Stroke { stroke: Stroke, mask: Mask, base: Arc<Image>, mode: StrokeMode },
     NewSelection { start: Pt, cur: Pt },
     Lasso { points: Vec<Pt> },
-    MoveSelection { grab: Pt, orig: IRect },
-    ResizeSelection { handle: Handle, orig: IRect },
+    MoveSelection { grab: Pt, orig: IRect, was_modified: bool },
+    /// `flip`: the handle went past the opposite edge (the content is mirrored).
+    ResizeSelection { handle: Handle, orig: IRect, flip: (bool, bool), was_modified: bool },
     NewShape { start: Pt },
     EditShape { grab: ShapeGrab, start: Pt, orig: ShapeGeom },
     CurveControl { second: bool },
@@ -478,7 +479,7 @@ impl Editor {
             if l.visible {
                 acc = blend_over(acc, l.image.get_raw(x, y));
             }
-            if i == self.doc.active {
+            if i == self.doc.active && l.visible {
                 if let Some(sel) = self.selection.as_ref().filter(|s| s.is_floating()) {
                     if sel.rect.contains(x, y) && sel.current_mask().is_none_or(|m| m.get(x - sel.rect.x, y - sel.rect.y) >= 128) {
                         let p = sel.current_image().unwrap().get(x - sel.rect.x, y - sel.rect.y);
@@ -697,6 +698,9 @@ impl Editor {
     }
 
     pub fn set_transparent_selection(&mut self, on: bool) {
+        if self.transparent_selection != on && self.selection.as_ref().is_some_and(|s| s.is_floating()) {
+            self.modified = true;
+        }
         self.transparent_selection = on;
         if let Some(r) = self.selection.as_ref().map(|s| s.rect) {
             self.mark(r);
@@ -758,7 +762,7 @@ impl Editor {
                     points.push(p);
                 }
             }
-            Drag::MoveSelection { grab, orig } => {
+            Drag::MoveSelection { grab, orig, .. } => {
                 let (dx, dy) = ((p.x - grab.x).round() as i32, (p.y - grab.y).round() as i32);
                 let (ox, oy) = (orig.x, orig.y);
                 if let Some(sel) = self.selection.as_mut() {
@@ -768,7 +772,7 @@ impl Editor {
                     self.mark(old.union(&new));
                 }
             }
-            Drag::ResizeSelection { handle, orig } => {
+            Drag::ResizeSelection { handle, orig, flip, .. } => {
                 let (h, o) = (*handle, *orig);
                 let lo = Pt::new(o.x as f32, o.y as f32);
                 let hi = Pt::new(o.right() as f32, o.bottom() as f32);
@@ -776,10 +780,15 @@ impl Editor {
                 let mut r = IRect::from_corners(a.x.round() as i32, a.y.round() as i32, b.x.round() as i32, b.y.round() as i32);
                 r.w = r.w.max(1);
                 r.h = r.h.max(1);
-                if let Some(sel) = self.selection.as_mut() {
-                    let old = sel.rect;
-                    sel.resize_to(r);
-                    self.mark(old.union(&r));
+                // Refuse sizes the memory budget cannot hold (far drags at low zoom).
+                if codec::size_ok(r.w as u32, r.h as u32) {
+                    *flip = (b.x < a.x, b.y < a.y);
+                    let f = *flip;
+                    if let Some(sel) = self.selection.as_mut() {
+                        let old = sel.rect;
+                        sel.resize_preview(r, f.0, f.1);
+                        self.mark(old.union(&r));
+                    }
                 }
             }
             Drag::NewShape { start } => {
@@ -870,18 +879,36 @@ impl Editor {
                     ps.stage = if second { ShapeStage::Editing } else { ShapeStage::Bend2 };
                 }
             }
-            Drag::Stroke { .. } | Drag::MoveSelection { .. } | Drag::ResizeSelection { .. } | Drag::EditShape { .. } | Drag::PolygonPoint => {}
+            Drag::ResizeSelection { orig, flip, was_modified, .. } => {
+                if self.selection.as_ref().is_some_and(|s| s.rect == orig) && flip == (false, false) {
+                    // A click on a handle without dragging: no undo step, nothing lifted.
+                    self.unrecord(was_modified);
+                } else if let Some(sel) = self.selection.as_mut() {
+                    // Replace the fast preview by the smooth (and mirrored) result.
+                    sel.finish_resize(flip.0, flip.1);
+                    let r = sel.rect;
+                    self.mark(r);
+                }
+            }
+            Drag::MoveSelection { orig, was_modified, .. } => {
+                if self.selection.as_ref().is_some_and(|s| s.rect == orig) {
+                    self.unrecord(was_modified);
+                }
+            }
+            Drag::Stroke { .. } | Drag::EditShape { .. } | Drag::PolygonPoint => {}
         }
     }
 
     /// Double click: closes a polygon being drawn.
     pub fn double_click(&mut self, _x: f32, _y: f32) {
         self.finish_drag();
+        let zoom = self.zoom;
         if let Some(ps) = self.pending.as_mut() {
             if ps.stage == ShapeStage::PolygonOpen {
                 if let ShapeGeom::Polygon { points, .. } = &mut ps.geom {
                     // The second click of the double click added a duplicate point.
-                    while points.len() > 3 && points[points.len() - 1].dist(points[points.len() - 2]) < 2.0 {
+                    let near = (2.0 / zoom).max(1.0);
+                    while points.len() > 3 && points[points.len() - 1].dist(points[points.len() - 2]) < near {
                         points.pop();
                     }
                 }
@@ -1032,10 +1059,11 @@ impl Editor {
         }
         if self.selection.is_some() {
             if let Some(handle) = self.selection_handle_at(p) {
+                let was_modified = self.modified;
                 self.record();
                 self.lift(false);
                 let orig = self.selection.as_ref().unwrap().rect;
-                self.drag = Some(Drag::ResizeSelection { handle, orig });
+                self.drag = Some(Drag::ResizeSelection { handle, orig, flip: (false, false), was_modified });
                 return;
             }
             let (inside, floating, rect) = {
@@ -1043,6 +1071,7 @@ impl Editor {
                 (s.rect.contains_pt(p), s.is_floating(), s.rect)
             };
             if inside {
+                let was_modified = self.modified;
                 self.record();
                 if !floating {
                     // Ctrl+drag moves a copy and leaves the original pixels in place.
@@ -1053,8 +1082,9 @@ impl Editor {
                     if let Some(sel) = self.selection.as_ref() {
                         sel.stamp(Arc::make_mut(&mut self.doc.layers[active].image), key);
                     }
+                    self.mark(rect);
                 }
-                self.drag = Some(Drag::MoveSelection { grab: p, orig: rect });
+                self.drag = Some(Drag::MoveSelection { grab: p, orig: rect, was_modified });
                 return;
             }
             self.commit_selection();
@@ -1092,7 +1122,7 @@ impl Editor {
             return;
         };
         self.commit_selection();
-        self.selection = Some(sel.inverted(self.doc.width(), self.doc.height()));
+        self.selection = sel.inverted(self.doc.width(), self.doc.height());
         if !self.tool.is_select() {
             self.tool = Tool::RectSelect;
         }
@@ -1104,7 +1134,11 @@ impl Editor {
 
     pub fn delete_selection(&mut self) -> bool {
         self.finish_drag();
-        self.commit_shape();
+        // Delete on a shape that is still editable removes it.
+        if self.pending.is_some() {
+            self.cancel_shape();
+            return true;
+        }
         if self.selection.is_none() {
             return false;
         }
@@ -1142,7 +1176,13 @@ impl Editor {
     /// Moves the selection by whole pixels (arrow keys).
     pub fn nudge(&mut self, dx: i32, dy: i32) -> bool {
         self.finish_drag();
+        if let Some(ps) = self.pending.as_mut().filter(|ps| ps.stage == ShapeStage::Editing) {
+            ps.geom.translate(Pt::new(dx as f32, dy as f32));
+            self.render_pending();
+            return true;
+        }
         let Some(floating) = self.selection.as_ref().map(|s| s.is_floating()) else { return false };
+        self.modified = true;
         if !floating {
             self.record();
             self.lift(false);
@@ -1281,25 +1321,34 @@ impl Editor {
     /// Redraws the pending shape from the layer pixels underneath it.
     fn render_pending(&mut self) {
         let Some(ps) = self.pending.as_mut() else { return };
+        // Editing a pending shape changes the picture (also after a save).
+        self.modified = true;
         let (w, h) = (self.doc.width(), self.doc.height());
         let (line_c, fill_c) = if ps.swapped { (self.color2, self.color1) } else { (self.color1, self.color2) };
         let size = self.sizes[Tool::Shape.size_slot()];
-        let (fm, lm, r) = shapes::render(ps.kind, &ps.geom, self.outline, self.fill, size, w, h);
+        let cov = shapes::render(ps.kind, &ps.geom, self.outline, self.fill, size, w, h);
+        let r = cov.rect;
         let layer = Arc::make_mut(&mut self.doc.layers[self.doc.active].image);
         let prev = ps.drawn;
-        for y in prev.y..prev.bottom() {
-            for x in prev.x..prev.right() {
-                layer.set_raw(x, y, ps.base.get_raw(x, y));
+        // Restore the previous preview area (row copies), then blend only covered pixels.
+        let iw = w as usize;
+        for area in [prev, r] {
+            let n = area.w.max(0) as usize * 4;
+            for y in area.y..area.bottom() {
+                let i = (y as usize * iw + area.x as usize) * 4;
+                layer.data_mut()[i..i + n].copy_from_slice(&ps.base.data()[i..i + n]);
             }
         }
         for y in r.y..r.bottom() {
             for x in r.x..r.right() {
+                let (f, l) = (cov.fill_at(x, y), cov.line_at(x, y));
+                if f == 0 && l == 0 {
+                    continue;
+                }
                 let mut px = ps.base.get_raw(x, y);
-                let f = fm.get(x, y);
                 if f > 0 {
                     px = blend_over(px, fill_c.scale_alpha(f).to_array());
                 }
-                let l = lm.get(x, y);
                 if l > 0 {
                     px = blend_over(px, line_c.scale_alpha(l).to_array());
                 }
@@ -1312,10 +1361,25 @@ impl Editor {
 
     // ----- image commands --------------------------------------------------
 
-    /// Rotates/flips/resizes/skews the selection, or the whole image without one.
-    pub fn transform(&mut self, t: Transform) {
+    /// Rotates/flips/resizes/skews the selection, or the whole image without one
+    /// (or when everything is selected). Returns false when the result would be
+    /// larger than the size limits ([`codec::size_ok`]); nothing changes then.
+    pub fn transform(&mut self, t: Transform) -> bool {
         self.finish_drag();
         self.commit_shape();
+        let whole = self.doc.bounds();
+        if self.selection.as_ref().is_some_and(|s| !s.is_floating() && !s.is_freeform() && s.rect == whole) {
+            // Select All + rotate turns the picture, like Paint.
+            self.selection = None;
+        }
+        let (w, h) = match &self.selection {
+            Some(s) => (s.rect.w.max(1) as u32, s.rect.h.max(1) as u32),
+            None => (self.doc.width(), self.doc.height()),
+        };
+        let (ow, oh) = t.output_size(w, h);
+        if ow > codec::MAX_SIDE as u64 || oh > codec::MAX_SIDE as u64 || !codec::size_ok(ow as u32, oh as u32) {
+            return false;
+        }
         self.record();
         if self.selection.is_some() {
             self.lift(false);
@@ -1328,42 +1392,74 @@ impl Editor {
             self.doc.transform_all(t, self.color2);
             self.sync_frame();
         }
+        true
+    }
+
+    /// Takes back the last history entry for an operation that changed nothing in
+    /// the end (a click without drag): state, redo stack and unsaved flag.
+    fn unrecord(&mut self, was_modified: bool) {
+        if let Some(prev) = self.history.discard_last() {
+            self.doc = prev.doc;
+            self.selection = prev.selection;
+            self.sync_frame();
+        }
+        self.modified = was_modified;
     }
 
     /// Resizes the canvas (no scaling), anchored top-left.
-    pub fn resize_canvas(&mut self, w: u32, h: u32) {
-        self.resize_canvas_at(w, h, 0, 0);
+    pub fn resize_canvas(&mut self, w: u32, h: u32) -> bool {
+        self.resize_canvas_at(w, h, 0, 0)
     }
 
     /// Resizes the canvas with the old pixels placed at (`dx`, `dy`): dragging the
     /// left or top canvas handles grows or shrinks the picture on that side.
-    pub fn resize_canvas_at(&mut self, w: u32, h: u32, dx: i32, dy: i32) {
+    /// Returns false (nothing changes) when the size is beyond the limits.
+    pub fn resize_canvas_at(&mut self, w: u32, h: u32, dx: i32, dy: i32) -> bool {
         self.commit_all();
-        let (w, h) = (w.clamp(1, codec::MAX_SIDE), h.clamp(1, codec::MAX_SIDE));
+        let (w, h) = (w.max(1), h.max(1));
+        if !codec::size_ok(w, h) {
+            return false;
+        }
         if w == self.doc.width() && h == self.doc.height() && dx == 0 && dy == 0 {
-            return;
+            return true;
         }
         self.record();
         self.doc.resize_canvas_at(w, h, dx, dy, self.color2);
         self.sync_frame();
+        true
     }
 
     /// Makes the background of the active layer (or of the selected area) transparent.
     pub fn remove_background(&mut self, tolerance: u8) -> bool {
         self.finish_drag();
         self.commit_shape();
-        if self.selection.as_ref().is_some_and(|s| s.is_floating()) {
-            let r = self.selection.as_ref().unwrap().rect;
+        if let Some(settled) = self.selection.as_ref().filter(|s| s.is_floating()).map(|s| s.settled()) {
+            // Drop the floating pixels in place and keep the same (possibly free-form) area.
             self.commit_selection();
-            self.selection = Some(Selection::rect(r.clamp_to(self.doc.width(), self.doc.height())));
+            self.selection = Some(settled);
         }
-        let area = self.selection.as_ref().map_or(self.doc.bounds(), |s| s.rect);
+        let area = self.selection.as_ref().map_or(self.doc.bounds(), |s| s.rect).clamp_to(self.doc.width(), self.doc.height());
+        if area.is_empty() {
+            self.selection = None;
+            return false;
+        }
+        // A free-form selection limits the removal to the lasso.
+        let allowed = self.selection.as_ref().filter(|s| s.is_freeform()).map(|s| {
+            let mut m = Mask::new(self.doc.width(), self.doc.height());
+            for y in area.y..area.bottom() {
+                for x in area.x..area.right() {
+                    if s.contains(x, y) {
+                        m.set(x, y, 255);
+                    }
+                }
+            }
+            m
+        });
         let was_modified = self.modified;
         self.record();
-        let r = fill::remove_background(self.doc.active_image_mut(), area, tolerance);
+        let r = fill::remove_background(self.doc.active_image_mut(), area, tolerance, allowed.as_ref());
         if r.is_empty() {
-            self.history.discard_last();
-            self.modified = was_modified;
+            self.unrecord(was_modified);
             return false;
         }
         self.mark(r);
@@ -1386,12 +1482,20 @@ impl Editor {
     }
 
     /// Pastes `img` as a floating selection at (x, y), growing the canvas if needed.
-    pub fn paste(&mut self, img: Image, x: i32, y: i32) {
+    /// Returns false (nothing pasted) when the result would exceed the size limits.
+    pub fn paste(&mut self, img: Image, x: i32, y: i32) -> bool {
         self.commit_all();
-        self.record();
         let (x, y) = (x.max(0), y.max(0));
-        let need_w = (x as u32 + img.width()).max(self.doc.width()).min(codec::MAX_SIDE);
-        let need_h = (y as u32 + img.height()).max(self.doc.height()).min(codec::MAX_SIDE);
+        if img.width() == 0 || img.height() == 0 {
+            return false;
+        }
+        let need_w = (x as u64 + img.width() as u64).max(self.doc.width() as u64);
+        let need_h = (y as u64 + img.height() as u64).max(self.doc.height() as u64);
+        if need_w > codec::MAX_SIDE as u64 || need_h > codec::MAX_SIDE as u64 || !codec::size_ok(need_w as u32, need_h as u32) {
+            return false;
+        }
+        let (need_w, need_h) = (need_w as u32, need_h as u32);
+        self.record();
         if need_w != self.doc.width() || need_h != self.doc.height() {
             self.doc.resize_canvas(need_w, need_h, self.color2);
             self.sync_frame();
@@ -1402,6 +1506,7 @@ impl Editor {
         if !self.tool.is_select() {
             self.tool = Tool::RectSelect;
         }
+        true
     }
 
     // ----- layers ----------------------------------------------------------
@@ -1504,7 +1609,13 @@ impl Editor {
     }
 
     pub fn new_document(&mut self, w: u32, h: u32) {
-        self.replace_document(Document::new(w.clamp(1, codec::MAX_SIDE), h.clamp(1, codec::MAX_SIDE), Rgba::WHITE));
+        let (mut w, mut h) = (w.clamp(1, codec::MAX_SIDE), h.clamp(1, codec::MAX_SIDE));
+        while !codec::size_ok(w, h) {
+            // Too many pixels: shrink proportionally until it fits.
+            w = (w * 9 / 10).max(1);
+            h = (h * 9 / 10).max(1);
+        }
+        self.replace_document(Document::new(w, h, Rgba::WHITE));
     }
 
     pub fn load_image(&mut self, img: Image) {

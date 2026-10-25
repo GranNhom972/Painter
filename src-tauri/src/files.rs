@@ -4,6 +4,7 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::ipc::{InvokeBody, Request, Response};
 
 #[tauri::command]
@@ -39,21 +40,30 @@ pub fn file_from_args(args: impl IntoIterator<Item = String>) -> Option<String> 
 }
 
 /// Writes through a temporary file then renames it, so a failed save never
-/// leaves a truncated picture behind.
+/// leaves a truncated picture behind. Every call uses its own temporary file
+/// (overlapping saves are safe), a symbolic link is followed to its target, and
+/// an existing file keeps its permissions.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let fail = |e: std::io::Error| format!("{}: {e}", path.display());
+    let path: PathBuf = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    path.file_name().ok_or("invalid file name")?;
     let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
-    let name = path.file_name().ok_or("invalid file name")?.to_string_lossy();
-    let tmp: PathBuf = dir.join(format!(".{name}.paint-tmp"));
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let tmp = dir.join(format!(".paint-{}-{n}.tmp", std::process::id()));
     let result = (|| {
         let mut f = fs::File::create(&tmp)?;
         f.write_all(bytes)?;
         f.sync_all()?;
-        fs::rename(&tmp, path)
+        if let Ok(meta) = fs::metadata(&path) {
+            fs::set_permissions(&tmp, meta.permissions())?;
+        }
+        fs::rename(&tmp, &path)
     })();
     if result.is_err() {
         let _ = fs::remove_file(&tmp);
     }
-    result.map_err(|e| format!("{}: {e}", path.display()))
+    result.map_err(fail)
 }
 
 /// Decodes `%XX` escapes (UTF-8).

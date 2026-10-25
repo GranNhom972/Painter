@@ -120,7 +120,11 @@ fn canvas_resize_keeps_pixels() {
     e.undo();
     e.undo();
     assert_eq!((e.width(), e.height()), (20, 20));
-    e.resize_canvas(0, 100_000);
+    // Beyond the limits: refused, nothing changes.
+    assert!(!e.resize_canvas(0, 100_000));
+    assert_eq!((e.width(), e.height()), (20, 20));
+    assert!(!e.resize_canvas(10_000, 10_000), "100 megapixels is over the memory budget");
+    assert!(e.resize_canvas(1, codec::MAX_SIDE));
     assert_eq!((e.width(), e.height()), (1, codec::MAX_SIDE));
 }
 
@@ -236,14 +240,17 @@ fn switching_layer_commits_the_selection_on_its_layer() {
 }
 
 #[test]
-fn merging_a_hidden_layer_discards_it() {
+fn merging_keeps_hidden_pixels_and_visibility() {
     let mut e = Editor::new(10, 10);
     e.add_layer();
     e.set_tool(Tool::Fill);
     click(&mut e, 1.0, 1.0);
     e.set_layer_visible(1, false);
     e.merge_down(1);
-    assert!(e.doc().layers[0].image.is_uniform(WHITE));
+    // The hidden layer's pixels are merged, not thrown away...
+    assert_eq!(e.doc().layers[0].image.get(5, 5), BLACK);
+    // ...and the result stays visible because the lower layer was.
+    assert!(e.doc().layers[0].visible);
 }
 
 // ----- files ----------------------------------------------------------------

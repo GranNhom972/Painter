@@ -1,11 +1,13 @@
-// Minimal static server for the UI (browser mode and end-to-end tests).
+// Minimal static server for the web version and the end-to-end tests.
+// Environment: PORT (default 4173), HOST (default 127.0.0.1), ROOT (default ui/).
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = fileURLToPath(new URL('../ui/', import.meta.url));
+const root = process.env.ROOT || fileURLToPath(new URL('../ui/', import.meta.url));
 const port = Number(process.env.PORT || 4173);
+const host = process.env.HOST || '127.0.0.1';
 const types = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -14,6 +16,8 @@ const types = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
+  '.ico': 'image/x-icon',
 };
 
 createServer(async (req, res) => {
@@ -30,4 +34,4 @@ createServer(async (req, res) => {
   } catch {
     res.writeHead(404).end('not found');
   }
-}).listen(port, '127.0.0.1', () => console.log(`Paint UI on http://127.0.0.1:${port}/`));
+}).listen(port, host, () => console.log(`Paint (web) : http://${host === '0.0.0.0' ? 'localhost' : host}:${port}/`));

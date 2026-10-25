@@ -10,9 +10,13 @@ function draw(Engine, wasm, w, h, paint) {
   cv.height = h;
   const data = new Uint8ClampedArray(wasm.memory.buffer, e.frame_ptr(), e.frame_len()).slice();
   // White becomes transparent so previews sit on any theme.
+  // Faint brushes (watercolour) are boosted so every preview reads clearly.
+  let min = 255;
+  for (let i = 0; i < data.length; i += 4) min = Math.min(min, data[i], data[i + 1], data[i + 2]);
+  const gain = min > 0 && min < 255 ? 255 / (255 - min) : 1;
   for (let i = 0; i < data.length; i += 4) {
     const lum = Math.min(data[i], data[i + 1], data[i + 2]);
-    data[i + 3] = 255 - lum;
+    data[i + 3] = Math.min(255, (255 - lum) * gain);
     data[i] = data[i + 1] = data[i + 2] = 0;
   }
   cv.getContext('2d').putImageData(new ImageData(data, w, h), 0, 0);

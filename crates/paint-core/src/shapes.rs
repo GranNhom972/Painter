@@ -158,6 +158,13 @@ impl ShapeGeom {
 
     /// Maps every point from the box `from` to the box `to` (both as (min, max)).
     pub fn remap(&mut self, from: (Pt, Pt), to: (Pt, Pt)) {
+        // A box shape is its bounds: take the new ones as they are, even from a
+        // collapsed (zero width or height) box.
+        if let ShapeGeom::Box(a, b) = self {
+            *a = to.0;
+            *b = to.1;
+            return;
+        }
         let map = |p: Pt| {
             let fx = if from.1.x != from.0.x { (p.x - from.0.x) / (from.1.x - from.0.x) } else { 0.0 };
             let fy = if from.1.y != from.0.y { (p.y - from.0.y) / (from.1.y - from.0.y) } else { 0.0 };
@@ -313,28 +320,56 @@ pub fn box_paths(kind: ShapeKind, l: f32, t: f32, r: f32, b: f32) -> Vec<Vec<Pt>
     }
 }
 
-/// Coverage of a shape: (fill, outline). Both masks are canvas-sized; the rect is the touched area.
-pub fn render(kind: ShapeKind, geom: &ShapeGeom, outline: OutlineStyle, fill: FillStyle, width: u32, w: u32, h: u32) -> (Mask, Mask, IRect) {
+/// Coverage of a shape over `rect` (canvas coordinates): `fill` and `line` are
+/// `rect`-sized masks, so rendering costs only the shape's area, not the canvas.
+#[derive(Clone, Debug)]
+pub struct Coverage {
+    pub rect: IRect,
+    pub fill: Mask,
+    pub line: Mask,
+}
+
+impl Coverage {
+    pub fn fill_at(&self, x: i32, y: i32) -> u8 {
+        self.fill.get(x - self.rect.x, y - self.rect.y)
+    }
+    pub fn line_at(&self, x: i32, y: i32) -> u8 {
+        self.line.get(x - self.rect.x, y - self.rect.y)
+    }
+}
+
+/// Renders a shape on a `w` x `h` canvas.
+pub fn render(kind: ShapeKind, geom: &ShapeGeom, outline: OutlineStyle, fill: FillStyle, width: u32, w: u32, h: u32) -> Coverage {
+    let lw = width.max(1) as f32;
+    let (lo, hi) = geom.bounds();
+    let m = lw / 2.0 + 2.0;
+    let rect = IRect::from_bounds(lo.x - m, lo.y - m, hi.x + m + 1.0, hi.y + m + 1.0).clamp_to(w, h);
+    // Work in the frame of `rect`: integer offsets keep the pixel-centre snapping intact.
+    let mut local = geom.clone();
+    local.translate(Pt::new(-rect.x as f32, -rect.y as f32));
+    let (fill_m, line_m) = render_local(kind, &local, outline, fill, lw, rect.w.max(0) as u32, rect.h.max(0) as u32);
+    Coverage { rect, fill: fill_m, line: line_m }
+}
+
+fn render_local(kind: ShapeKind, geom: &ShapeGeom, outline: OutlineStyle, fill: FillStyle, lw: f32, w: u32, h: u32) -> (Mask, Mask) {
     let mut fill_m = Mask::new(w, h);
     let mut line_m = Mask::new(w, h);
-    let mut dirty = IRect::default();
-    let lw = width.max(1) as f32;
     let has_outline = outline == OutlineStyle::Solid || kind.is_open();
     match geom {
         ShapeGeom::Line(a, b) => {
-            dirty = raster::stroke_polyline(&mut line_m, &[pixel_center(*a), pixel_center(*b)], lw, false, 1.0);
+            raster::stroke_polyline(&mut line_m, &[pixel_center(*a), pixel_center(*b)], lw, false, 1.0);
         }
         ShapeGeom::Curve(p) => {
             let pts = raster::cubic_bezier(pixel_center(p[0]), p[1], p[2], pixel_center(p[3]));
-            dirty = raster::stroke_polyline(&mut line_m, &pts, lw, false, 1.0);
+            raster::stroke_polyline(&mut line_m, &pts, lw, false, 1.0);
         }
         ShapeGeom::Polygon { points, closed } => {
             let pts: Vec<Pt> = points.iter().map(|p| pixel_center(*p)).collect();
             if *closed && fill == FillStyle::Solid && pts.len() >= 3 {
-                dirty = dirty.union(&raster::fill_polygons(&mut fill_m, std::slice::from_ref(&pts), FillRule::NonZero, 1.0));
+                raster::fill_polygons(&mut fill_m, std::slice::from_ref(&pts), FillRule::NonZero, 1.0);
             }
             if has_outline || !*closed {
-                dirty = dirty.union(&raster::stroke_polyline(&mut line_m, &pts, lw, *closed, 1.0));
+                raster::stroke_polyline(&mut line_m, &pts, lw, *closed, 1.0);
             }
         }
         ShapeGeom::Box(a, b) => {
@@ -347,7 +382,7 @@ pub fn render(kind: ShapeKind, geom: &ShapeGeom, outline: OutlineStyle, fill: Fi
             };
             let paths = box_paths(kind, l, t, r, bt);
             if fill == FillStyle::Solid {
-                dirty = dirty.union(&raster::fill_polygons(&mut fill_m, &paths, FillRule::NonZero, 1.0));
+                raster::fill_polygons(&mut fill_m, &paths, FillRule::NonZero, 1.0);
             }
             if has_outline {
                 if kind == ShapeKind::Rectangle {
@@ -357,16 +392,16 @@ pub fn render(kind: ShapeKind, geom: &ShapeGeom, outline: OutlineStyle, fill: Fi
                     if r - l > lw && bt - t > lw {
                         rings.push(vec![Pt::new(l + hw, t + hw), Pt::new(l + hw, bt - hw), Pt::new(r - hw, bt - hw), Pt::new(r - hw, t + hw)]);
                     }
-                    dirty = dirty.union(&raster::fill_polygons(&mut line_m, &rings, FillRule::EvenOdd, 1.0));
+                    raster::fill_polygons(&mut line_m, &rings, FillRule::EvenOdd, 1.0);
                 } else {
                     for p in &paths {
-                        dirty = dirty.union(&raster::stroke_polyline(&mut line_m, p, lw, true, 1.0));
+                        raster::stroke_polyline(&mut line_m, p, lw, true, 1.0);
                     }
                 }
             }
         }
     }
-    (fill_m, line_m, dirty.clamp_to(w, h))
+    (fill_m, line_m)
 }
 
 /// Constrains a drag for Shift: squares for box shapes, 45° steps for lines.
@@ -407,45 +442,56 @@ mod tests {
             let (x0, x1) = paths.iter().flatten().fold((f32::MAX, f32::MIN), |(a, b), p| (a.min(p.x), b.max(p.x)));
             let (y0, y1) = paths.iter().flatten().fold((f32::MAX, f32::MIN), |(a, b), p| (a.min(p.y), b.max(p.y)));
             assert!(x0 < 11.0 && x1 > 109.0 && y0 < 21.0 && y1 > 69.0, "{k:?} spans only {x0}..{x1} x {y0}..{y1}");
-            let (f, o, d) = render(k, &ShapeGeom::Box(Pt::new(10.0, 20.0), Pt::new(110.0, 70.0)), OutlineStyle::Solid, FillStyle::Solid, 3, 200, 100);
-            assert!(f.count_set() > 300, "{k:?} fill {}", f.count_set());
-            assert!(o.count_set() > 100, "{k:?} outline {}", o.count_set());
-            assert!(!d.is_empty());
+            let c = render(k, &ShapeGeom::Box(Pt::new(10.0, 20.0), Pt::new(110.0, 70.0)), OutlineStyle::Solid, FillStyle::Solid, 3, 200, 100);
+            assert!(c.fill.count_set() > 300, "{k:?} fill {}", c.fill.count_set());
+            assert!(c.line.count_set() > 100, "{k:?} outline {}", c.line.count_set());
+            // The coverage frame is the shape's area (plus a margin), not the canvas.
+            assert!(c.rect.x >= 5 && c.rect.right() <= 116 && c.rect.y >= 15 && c.rect.bottom() <= 76, "{k:?} {:?}", c.rect);
         }
     }
 
     #[test]
     fn crisp_rectangle_outline() {
-        let (f, o, _) = render(ShapeKind::Rectangle, &ShapeGeom::Box(Pt::new(2.2, 2.7), Pt::new(7.9, 6.1)), OutlineStyle::Solid, FillStyle::None, 1, 12, 12);
-        assert_eq!(f.count_set(), 0);
+        let c = render(ShapeKind::Rectangle, &ShapeGeom::Box(Pt::new(2.2, 2.7), Pt::new(7.9, 6.1)), OutlineStyle::Solid, FillStyle::None, 1, 12, 12);
+        assert_eq!(c.fill.count_set(), 0);
         // Border of the 6x5 pixel box (2..=7, 2..=6) only, fully opaque.
-        assert_eq!(o.count_set(), 2 * 6 + 2 * 3);
-        assert_eq!(o.get(2, 2), 255);
-        assert_eq!(o.get(7, 6), 255);
-        assert_eq!(o.get(4, 4), 0);
+        assert_eq!(c.line.count_set(), 2 * 6 + 2 * 3);
+        assert_eq!(c.line_at(2, 2), 255);
+        assert_eq!(c.line_at(7, 6), 255);
+        assert_eq!(c.line_at(4, 4), 0);
         // Fill only covers whole pixels.
-        let (f, o, _) = render(ShapeKind::Rectangle, &ShapeGeom::Box(Pt::new(2.0, 2.0), Pt::new(4.0, 3.0)), OutlineStyle::None, FillStyle::Solid, 1, 12, 12);
-        assert_eq!(o.count_set(), 0);
-        assert_eq!(f.count_set(), 6);
+        let c = render(ShapeKind::Rectangle, &ShapeGeom::Box(Pt::new(2.0, 2.0), Pt::new(4.0, 3.0)), OutlineStyle::None, FillStyle::Solid, 1, 12, 12);
+        assert_eq!(c.line.count_set(), 0);
+        assert_eq!(c.fill.count_set(), 6);
+        assert_eq!(c.fill_at(4, 3), 255);
     }
 
     #[test]
     fn line_and_curve() {
-        let (_, o, _) = render(ShapeKind::Line, &ShapeGeom::Line(Pt::new(1.0, 5.0), Pt::new(9.0, 5.0)), OutlineStyle::None, FillStyle::Solid, 1, 12, 12);
-        assert_eq!(o.count_set(), 9);
-        let c = ShapeGeom::Curve([Pt::new(1.0, 10.0), Pt::new(1.0, 0.0), Pt::new(20.0, 0.0), Pt::new(20.0, 10.0)]);
-        let (_, o, _) = render(ShapeKind::Curve, &c, OutlineStyle::Solid, FillStyle::None, 2, 30, 30);
-        assert!(o.get(10, 3) > 0 && o.get(10, 10) == 0);
+        let c = render(ShapeKind::Line, &ShapeGeom::Line(Pt::new(1.0, 5.0), Pt::new(9.0, 5.0)), OutlineStyle::None, FillStyle::Solid, 1, 12, 12);
+        assert_eq!(c.line.count_set(), 9);
+        assert_eq!(c.line_at(1, 5), 255);
+        let g = ShapeGeom::Curve([Pt::new(1.0, 10.0), Pt::new(1.0, 0.0), Pt::new(20.0, 0.0), Pt::new(20.0, 10.0)]);
+        let c = render(ShapeKind::Curve, &g, OutlineStyle::Solid, FillStyle::None, 2, 30, 30);
+        assert!(c.line_at(10, 3) > 0 && c.line_at(10, 10) == 0);
+        // Shapes partly outside the canvas are clipped, not shifted.
+        let c = render(ShapeKind::Line, &ShapeGeom::Line(Pt::new(-20.0, 5.0), Pt::new(9.0, 5.0)), OutlineStyle::Solid, FillStyle::None, 1, 12, 12);
+        assert_eq!(c.rect.x, 0);
+        assert_eq!(c.line_at(0, 5), 255);
+        assert_eq!(c.line_at(9, 5), 255);
+        assert_eq!(c.line_at(10, 5), 0);
+        let off = render(ShapeKind::Oval, &ShapeGeom::Box(Pt::new(-50.0, -50.0), Pt::new(-10.0, -10.0)), OutlineStyle::Solid, FillStyle::Solid, 3, 12, 12);
+        assert!(off.rect.is_empty());
     }
 
     #[test]
     fn polygon_open_and_closed() {
         let pts = vec![Pt::new(2.0, 2.0), Pt::new(20.0, 2.0), Pt::new(11.0, 18.0)];
-        let (f, o, _) = render(ShapeKind::Polygon, &ShapeGeom::Polygon { points: pts.clone(), closed: false }, OutlineStyle::Solid, FillStyle::Solid, 1, 30, 30);
-        assert_eq!(f.count_set(), 0);
-        assert!(o.get(11, 2) > 0);
-        let (f, _, _) = render(ShapeKind::Polygon, &ShapeGeom::Polygon { points: pts, closed: true }, OutlineStyle::Solid, FillStyle::Solid, 1, 30, 30);
-        assert!(f.get(11, 7) > 0);
+        let c = render(ShapeKind::Polygon, &ShapeGeom::Polygon { points: pts.clone(), closed: false }, OutlineStyle::Solid, FillStyle::Solid, 1, 30, 30);
+        assert_eq!(c.fill.count_set(), 0);
+        assert!(c.line_at(11, 2) > 0);
+        let c = render(ShapeKind::Polygon, &ShapeGeom::Polygon { points: pts, closed: true }, OutlineStyle::Solid, FillStyle::Solid, 1, 30, 30);
+        assert!(c.fill_at(11, 7) > 0);
     }
 
     #[test]
