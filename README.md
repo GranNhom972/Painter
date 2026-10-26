@@ -65,6 +65,24 @@ Autres modes : `./run --package` (paquets .deb/.rpm/AppImage), `./run --web-buil
 La version web est une application installable (PWA) : bouton « Installer » du navigateur.
 Une fois chargée, elle fonctionne hors ligne. Elle s'ouvre aussi avec « Ouvrir avec » pour les images.
 
+### Avec Docker
+
+```bash
+docker compose up -d      # construit l'image et démarre Paint : http://localhost:8088/
+docker compose down       # arrête Paint
+```
+
+Aucun outil n'est nécessaire en dehors de Docker : l'image compile le moteur Rust en
+WebAssembly, puis sert la version web avec nginx. Le conteneur tourne sans root, en lecture
+seule, sans capacités système, et redémarre tout seul avec Docker (`restart: unless-stopped`).
+`./run --docker` fait la même chose puis ouvre le navigateur.
+
+- Autre port : `PAINT_PORT=9000 docker compose up -d`.
+- Par défaut, Paint n'écoute que sur la machine locale. `PAINT_HOST=0.0.0.0` l'ouvre au réseau ;
+  le presse-papiers et le mode hors ligne exigent alors HTTPS (proxy inverse devant le conteneur),
+  car les navigateurs ne les autorisent qu'en HTTPS ou sur `localhost`.
+- Sans Compose : `docker build -t paint . && docker run -d -p 127.0.0.1:8088:8080 paint`.
+
 ## Installation sous Linux
 
 Après la compilation (voir ci-dessous), les paquets sont dans `target/release/bundle/` :
@@ -103,11 +121,13 @@ Sous Windows et macOS, `npm run build` produit les installateurs natifs (MSI/NSI
 |---|---|---|
 | Moteur (Rust) | `cargo test -p paint-core` | 183 tests : chaque outil, chaque pinceau et chaque forme, toute la sélection, le presse-papiers, l'historique, les calques, les formats, et 26 tests de non-régression issus des audits |
 | Moteur en WebAssembly | `npm run test:wasm` | l'API compilée en WASM, exécutée dans Node |
-| Interface (navigateur) | `npm run build:wasm && npm run test:e2e` | 99 tests Playwright qui pilotent l'interface réelle : boutons, menus, raccourcis (clavier AZERTY compris), navigation au clavier, fenêtres étroites, tactile, sélection à la souris, presse-papiers système, fichiers, calques, mode hors ligne |
+| Interface (navigateur) | `npm run build:wasm && npm run test:e2e` | 102 tests Playwright qui pilotent l'interface réelle : boutons, menus, raccourcis (clavier AZERTY compris), navigation au clavier, fenêtres étroites, tactile, sélection à la souris, presse-papiers système, fichiers, calques, Précédent/Suivant du navigateur, mode hors ligne |
 | Bureau (natif) | `cargo test -p paint` | fichiers (enregistrements simultanés, permissions, liens), ligne de commande, presse-papiers GTK contre un vrai serveur X (copier vers une autre application et coller depuis une autre application) |
-| Application de bureau | `scripts/test-desktop.sh` | 8 tests WebDriver sur l'application Tauri réelle (WebKitGTK) : souris, clavier, presse-papiers natif, enregistrement et ouverture, format d'après l'extension, confirmation à la fermeture |
+| Application de bureau | `scripts/test-desktop.sh` | 11 tests WebDriver sur l'application Tauri réelle (WebKitGTK) : barre de titre, souris (boutons Précédent/Suivant compris), clavier, presse-papiers natif, enregistrement et ouverture, format d'après l'extension, confirmation à la fermeture |
+| Image Docker | `scripts/test-docker.sh` | construit et démarre l'image avec Compose, vérifie qu'elle tourne sans root, en lecture seule, sans capacités et en bonne santé, puis passe les 102 tests Playwright contre le conteneur (types MIME, politique de sécurité du contenu, mode hors ligne compris) |
 
-`./run --test` lance toutes ces suites. `cargo run --release -p paint-core --example bench` mesure les
+`./run --test` lance toutes ces suites (celles du bureau et de Docker quand les outils sont présents).
+`PAINT_URL=http://localhost:8088/ npx playwright test` vise un serveur déjà démarré. `cargo run --release -p paint-core --example bench` mesure les
 opérations interactives sur une image de 12 mégapixels.
 
 ## Limites

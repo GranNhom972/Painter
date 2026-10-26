@@ -1,6 +1,6 @@
 // Web version: installable (manifest + icons) and usable offline (service worker).
 import { test, expect } from '@playwright/test';
-import { openApp, state } from './helpers.js';
+import { openApp, state, drag, rect } from './helpers.js';
 
 test('web app manifest and icons', async ({ page, request }) => {
   await openApp(page);
@@ -29,4 +29,34 @@ test('works offline once loaded', async ({ page, context }) => {
   expect([st.width, st.height]).toEqual([1152, 648]);
   expect(await page.evaluate(() => window.paint.engine.pixel(1, 1))).toBe('#ffffff');
   await context.setOffline(false);
+});
+
+test('serves the engine as application/wasm', async ({ request }) => {
+  // Streaming compilation refuses any other type.
+  const res = await request.get('pkg/paint_wasm_bg.wasm');
+  expect(res.ok()).toBe(true);
+  expect(res.headers()['content-type']).toBe('application/wasm');
+});
+
+test('no Content Security Policy violation while working', async ({ page }) => {
+  // Only the Docker image sends a CSP (PAINT_URL); with the dev server the list stays empty.
+  await page.addInitScript(() => {
+    window.violations = [];
+    document.addEventListener('securitypolicyviolation', (e) => window.violations.push(`${e.violatedDirective} ${e.blockedURI}`));
+  });
+  await openApp(page);
+  // Tool cursors are data: URLs, the size menu uses inline styles, layer
+  // thumbnails are blob: URLs and saving downloads a blob: URL.
+  await page.click('[data-testid=tool-pencil]');
+  await drag(page, [[30, 30], [90, 60]]);
+  await page.click('[data-testid=btn-size]');
+  await page.click('[data-testid=size-8]');
+  await page.click('[data-testid=btn-layers]');
+  await expect(page.locator('[data-testid=layer-0] img')).toHaveAttribute('src', /^blob:/);
+  await rect(page, 0, 0, 10, 10, '#ed1c24');
+  const dl = page.waitForEvent('download');
+  await page.locator('#viewport').focus();
+  await page.keyboard.press('Control+s');
+  await dl;
+  expect(await page.evaluate(() => window.violations)).toEqual([]);
 });

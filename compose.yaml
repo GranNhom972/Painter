@@ -1,0 +1,18 @@
+# Paint, version web :  docker compose up -d   →   http://localhost:8088/
+# Autre port : PAINT_PORT=9000 docker compose up -d
+# Accès depuis le réseau : PAINT_HOST=0.0.0.0 (le presse-papiers et le mode hors
+# ligne exigent alors HTTPS, par exemple derrière un proxy inverse).
+services:
+  paint:
+    build: .
+    image: paint:latest
+    ports:
+      - "${PAINT_HOST:-127.0.0.1}:${PAINT_PORT:-8088}:8080"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

@@ -1,0 +1,11 @@
+# Contexte de l'image : seuls Cargo.*, crates/, src-tauri/ et ui/ sont copiés.
+.git
+target
+node_modules
+dist
+ui/pkg
+src-tauri/gen
+test-results
+playwright-report
+tests
+*.log
