@@ -91,7 +91,7 @@ test('pasting a bigger picture enlarges the canvas', async ({ page }) => {
   await page.click('[data-testid=menu-edit]');
   await page.click('[data-testid=mi-paste]');
   await expect.poll(async () => (await state(page)).width).toBe(300);
-  await expect(page.locator('[data-testid=stat-canvas]')).toHaveText('300 × 200px');
+  await expect(page.locator('[data-testid=stat-canvas]')).toHaveText('300 x 200px');
   await page.keyboard.press('Control+z');
   expect((await state(page)).width).toBe(100);
 });

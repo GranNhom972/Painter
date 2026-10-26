@@ -181,6 +181,10 @@ const fr = {
   'color.name.18': 'Gris-bleu',
   'color.name.19': 'Lavande',
   'msg.tooLarge': "Image trop grande : au plus 64 mégapixels et 16 384 pixels par côté.",
+  'win.minimize': 'Réduire',
+  'win.maximize': 'Agrandir',
+  'win.restore': 'Restaurer',
+  'win.close': 'Fermer',
   'key.del': 'Suppr',
   'key.crop': 'Ctrl+Maj+X',
   'menu.ribbon': 'Ruban',
@@ -367,6 +371,10 @@ const en = {
   'color.name.18': 'Blue-gray',
   'color.name.19': 'Lavender',
   'msg.tooLarge': 'Picture too large: at most 64 megapixels and 16,384 pixels per side.',
+  'win.minimize': 'Minimize',
+  'win.maximize': 'Maximize',
+  'win.restore': 'Restore down',
+  'win.close': 'Close',
   'key.del': 'Del',
   'key.crop': 'Ctrl+Shift+X',
   'menu.ribbon': 'Ribbon',
@@ -382,7 +390,8 @@ function storedLanguage() {
   }
 }
 
-let lang = storedLanguage() || ((navigator.language || 'fr').toLowerCase().startsWith('fr') ? 'fr' : 'en');
+const stored = storedLanguage();
+let lang = stored in tables ? stored : (navigator.language || 'fr').toLowerCase().startsWith('fr') ? 'fr' : 'en';
 
 export function language() {
   return lang;
@@ -435,5 +444,6 @@ export function formatBytes(n) {
     i++;
   }
   const num = i === 0 ? String(v) : v.toFixed(1);
-  return `${lang === 'fr' ? num.replace('.', ',') : num} ${unit[i]}`;
+  // "20,4 Ko" in French, "20.4KB" in English (as Paint writes them).
+  return lang === 'fr' ? `${num.replace('.', ',')} ${unit[i]}` : `${num}${i === 0 ? ' ' : ''}${unit[i]}`;
 }

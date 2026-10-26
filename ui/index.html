@@ -13,6 +13,16 @@
 <body>
 <div id="app" class="app">
 
+  <!-- Title bar of the desktop app (Windows 11 style); hidden in the browser -->
+  <div class="titlebar" id="titlebar" hidden data-testid="titlebar">
+    <img class="app-icon" src="icons/paint.svg" alt="">
+    <span class="win-title" id="winTitle">Paint</span>
+    <div class="drag" data-tauri-drag-region></div>
+    <button class="caption-btn" data-win="minimize" data-icon="winMinimize" data-i18n-title="win.minimize" data-testid="win-minimize"></button>
+    <button class="caption-btn" data-win="maximize" data-icon="winMaximize" data-i18n-title="win.maximize" data-testid="win-maximize"></button>
+    <button class="caption-btn close" data-win="close" data-icon="winClose" data-i18n-title="win.close" data-testid="win-close"></button>
+  </div>
+
   <!-- Menu bar: File / Edit / View, quick access, settings -->
   <header class="menubar">
     <nav class="menus" aria-label="Menus">
@@ -33,7 +43,7 @@
     <div class="group" data-group="selection" role="group" aria-labelledby="glabel-selection">
       <div class="group-body">
         <button class="big-btn split" data-tool="select" data-menu="selection" data-testid="btn-selection" data-i18n-title="group.selection">
-          <span class="big-ico" data-icon="selectRect" id="selectionIcon"></span><span data-icon="chevron"></span>
+          <span class="big-ico" data-icon="selectRectBig" id="selectionIcon"></span><span data-icon="chevron"></span>
         </button>
       </div>
       <div class="group-label" id="glabel-selection" data-i18n="group.selection">Sélection</div>
@@ -43,9 +53,9 @@
       <div class="group-body grid-2">
         <button class="tool-btn" data-cmd="image.crop" data-icon="crop" data-i18n-title="image.crop" data-testid="btn-crop"></button>
         <button class="tool-btn split" data-menu="rotate" data-i18n-title="image.rotate" data-testid="btn-rotate"><span data-icon="rotate"></span><span data-icon="chevron"></span></button>
-        <button class="tool-btn" data-cmd="image.resize" data-icon="resize" data-i18n-title="image.resize" data-shortcut="Ctrl+W" data-testid="btn-resize"></button>
+        <button class="tool-btn" data-cmd="image.removeBg" data-icon="removeBg" data-i18n-title="image.removeBg" data-testid="btn-remove-bg"></button>
         <button class="tool-btn split" data-menu="flip" data-i18n-title="image.flip" data-testid="btn-flip"><span data-icon="flip"></span><span data-icon="chevron"></span></button>
-        <button class="big-btn" data-cmd="image.removeBg" data-i18n-title="image.removeBg" data-testid="btn-remove-bg"><span class="big-ico" data-icon="removeBg"></span></button>
+        <button class="big-btn" data-cmd="image.resize" data-i18n-title="image.resize" data-shortcut="Ctrl+W" data-testid="btn-resize"><span class="big-ico" data-icon="resize"></span></button>
       </div>
       <button class="big-btn split group-more" data-menu="image" data-testid="btn-image-more" data-i18n-title="group.image">
         <span class="big-ico" data-icon="crop"></span><span data-icon="chevron"></span>
@@ -99,7 +109,7 @@
           <button class="active-color" data-color-slot="2" data-testid="color2" data-i18n-title="color.2"><span class="swatch"></span></button>
         </div>
         <div class="palette" id="palette" data-testid="palette"></div>
-        <button class="edit-colors" data-cmd="color.edit" data-testid="btn-edit-colors" data-i18n-title="color.edit"><span class="rainbow"></span></button>
+        <button class="edit-colors" data-cmd="color.edit" data-testid="btn-edit-colors" data-i18n-title="color.edit"><span class="rainbow"><span class="rainbow-plus"></span></span></button>
         <button class="big-btn split group-more" data-menu="colors" data-testid="btn-colors-more" data-i18n-title="group.colors">
           <span class="rainbow"></span><span data-icon="chevron"></span>
         </button>

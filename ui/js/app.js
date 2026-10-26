@@ -68,6 +68,8 @@ export class App {
     this.bindKeyboard();
     this.bindClipboardEvents();
     this.bindDragDrop();
+    this.bindBackForward();
+    this.windowActions = platform.initWindowChrome(icon, t);
     platform.onCloseRequested(Object.assign(() => this.confirmDiscard(), { isDirty: () => this.engine.is_modified() || (this.text.active && this.text.box.value.trim() !== '') }));
     document.documentElement.lang = language();
     this.view.layout();
@@ -123,7 +125,7 @@ export class App {
       b.setAttribute('aria-pressed', String(on));
     });
     const selIcon = document.getElementById('selectionIcon');
-    const wanted = st.tool === 'select-free' ? 'selectFree' : 'selectRect';
+    const wanted = st.tool === 'select-free' ? 'selectFree' : 'selectRectBig';
     if (selIcon.dataset.icon !== wanted) {
       selIcon.dataset.icon = wanted;
       selIcon.innerHTML = icon(wanted);
@@ -143,7 +145,7 @@ export class App {
     this.text.setVisible(st.tool === 'text');
     if (this.text.active) this.text.style();
     const sel = st.selection;
-    this.setStat('statSel', sel && sel.w > 0 ? `${sel.w} × ${sel.h}px` : '');
+    this.setStat('statSel', sel && sel.w > 0 ? `${sel.w} x ${sel.h}px` : '');
     this.updateCanvasStatus(st.width, st.height);
     this.updateTitle();
   }
@@ -167,11 +169,11 @@ export class App {
     }
     const x = Math.floor(p.x);
     const y = Math.floor(p.y);
-    this.setStat('statPos', x >= 0 && y >= 0 && x < this.state.width && y < this.state.height ? `${x}, ${y}px` : '');
+    this.setStat('statPos', x >= 0 && y >= 0 && x < this.state.width && y < this.state.height ? `${x},${y}px` : '');
   }
 
   updateCanvasStatus(w, h) {
-    this.setStat('statCanvas', `${w} × ${h}px`);
+    this.setStat('statCanvas', `${w} x ${h}px`);
   }
 
   updateFileStatus() {
@@ -185,6 +187,8 @@ export class App {
     document.querySelector('[data-testid=zoom-value]').setAttribute('aria-label', `${t('status.zoom')} ${label}`);
     const slider = document.getElementById('zoomSlider');
     slider.value = Math.round((1000 * Math.log(z / 0.1)) / Math.log(80));
+    // Blue part of the track, up to the thumb.
+    slider.style.setProperty('--fill', `${slider.value / 10}%`);
   }
 
   /** Applies the text box being edited (shapes and selections stay editable). */
@@ -771,6 +775,50 @@ export class App {
       } else if (e.key === 'Enter') {
         this.engine.enter();
         this.changed({ layers: true });
+      }
+    });
+  }
+
+  // ----- back / forward = undo / redo ------------------------------------------------
+
+  /**
+   * The Back/Forward buttons of a mouse undo and redo (browser and desktop). In
+   * the browser, its own Back/Forward buttons do the same instead of leaving the
+   * page: the page keeps itself between two history entries and turns a visit
+   * to either of them into undo or redo.
+   */
+  bindBackForward() {
+    const nav = (dir) => this.run(dir < 0 ? 'edit.undo' : 'edit.redo');
+    if (platform.isDesktop) {
+      // Mouse buttons 3 (back) and 4 (forward); in a browser they go through the history below.
+      for (const type of ['mousedown', 'mouseup']) {
+        window.addEventListener(type, (e) => {
+          if (e.button !== 3 && e.button !== 4) return;
+          e.preventDefault();
+          if (type === 'mouseup' && !document.querySelector('dialog[open]')) nav(e.button === 3 ? -1 : 1);
+        });
+      }
+      return;
+    }
+    // History entries must be created after a user gesture, or browsers skip them.
+    const arm = () => {
+      window.removeEventListener('pointerdown', arm, true);
+      window.removeEventListener('keydown', arm, true);
+      history.replaceState({ paint: 'back' }, '');
+      history.pushState({ paint: 'home' }, '');
+      history.pushState({ paint: 'forward' }, '');
+      history.back();
+    };
+    window.addEventListener('pointerdown', arm, true);
+    window.addEventListener('keydown', arm, true);
+    window.addEventListener('popstate', (e) => {
+      const where = e.state && e.state.paint;
+      if (where === 'back') {
+        history.forward();
+        if (!document.querySelector('dialog[open]')) nav(-1);
+      } else if (where === 'forward') {
+        history.back();
+        if (!document.querySelector('dialog[open]')) nav(1);
       }
     });
   }

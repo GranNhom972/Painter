@@ -48,6 +48,8 @@ test('reorder with buttons and by dragging', async ({ page }) => {
   expect(await pixel(page, 10, 10)).toBe('#ffffff'); // red layer is now under the white one
   await page.click('[data-testid=layer-up]');
   expect(await pixel(page, 10, 10)).toBe('#ed1c24');
+  // The list is rebuilt on the next frame: measure the new rows, not the old ones.
+  await expect(page.locator('[data-testid=layer-1]')).toHaveClass(/active/);
   // Drag the background (bottom of the list) above the red layer.
   const from = await page.locator('[data-testid=layer-0]').boundingBox();
   const to = await page.locator('[data-testid=layer-1]').boundingBox();

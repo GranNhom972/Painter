@@ -148,7 +148,51 @@ export async function initialFile() {
 
 export function setTitle(title) {
   document.title = title;
+  const bar = document.getElementById('winTitle');
+  if (bar) bar.textContent = title;
   if (isDesktop) tauri.window.getCurrentWindow().setTitle(title).catch(() => {});
+}
+
+/**
+ * Desktop: the window has no system frame; show Paint's own title bar
+ * (minimize / maximize / close, drag to move, edges to resize).
+ * `labels(key)` translates the button tooltips.
+ */
+export function initWindowChrome(icon, labels) {
+  if (!isDesktop) return null;
+  const win = tauri.window.getCurrentWindow();
+  const app = document.getElementById('app');
+  const bar = document.getElementById('titlebar');
+  bar.hidden = false;
+  app.classList.add('frameless');
+  const maxBtn = bar.querySelector('[data-win=maximize]');
+  // Close goes through onCloseRequested, so unsaved changes are still confirmed.
+  const actions = { minimize: () => win.minimize(), toggleMaximize: () => win.toggleMaximize(), close: () => win.close() };
+  bar.querySelector('[data-win=minimize]').addEventListener('click', () => actions.minimize());
+  maxBtn.addEventListener('click', () => actions.toggleMaximize());
+  bar.querySelector('[data-win=close]').addEventListener('click', () => actions.close());
+  const sync = async () => {
+    const max = await win.isMaximized().catch(() => false);
+    app.classList.toggle('maximized', max);
+    maxBtn.innerHTML = icon(max ? 'winRestore' : 'winMaximize');
+    const label = labels(max ? 'win.restore' : 'win.maximize');
+    maxBtn.title = label;
+    maxBtn.setAttribute('aria-label', label);
+  };
+  win.onResized(sync);
+  sync();
+  for (const dir of ['North', 'South', 'East', 'West', 'NorthEast', 'NorthWest', 'SouthEast', 'SouthWest']) {
+    const edge = document.createElement('div');
+    edge.className = 'resize-edge';
+    edge.dataset.dir = dir;
+    edge.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      win.startResizeDragging(dir);
+    });
+    app.appendChild(edge);
+  }
+  return actions;
 }
 
 /** `handler()` returns true when the window may close. */

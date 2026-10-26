@@ -2,7 +2,7 @@
 
 import { t } from './i18n.js';
 
-function run(dialog, onOpen) {
+function run(dialog, onOpen, onShown) {
   return new Promise((resolve) => {
     const form = dialog.querySelector('form');
     if (onOpen) onOpen(form);
@@ -13,6 +13,7 @@ function run(dialog, onOpen) {
     dialog.returnValue = 'cancel';
     dialog.addEventListener('close', done);
     dialog.showModal();
+    if (onShown) onShown(form);
   });
 }
 
@@ -34,10 +35,6 @@ export async function resizeDialog(base) {
       if (from === 'w') f.rh.value = pct ? f.rw.value : Math.max(1, Math.round((f.rw.value * base.h) / base.w));
       else f.rw.value = pct ? f.rh.value : Math.max(1, Math.round((f.rh.value * base.w) / base.h));
     };
-    setTimeout(() => {
-      f.rw.focus();
-      f.rw.select();
-    });
     f.rw.oninput = () => sync('w');
     f.rh.oninput = () => sync('h');
     for (const r of form.querySelectorAll('input[name=unit]')) {
@@ -53,6 +50,10 @@ export async function resizeDialog(base) {
       const h = Math.max(1, Math.round(pct ? (base.h * Number(f.rh.value)) / 100 : Number(f.rh.value)));
       result = { w, h, sx: Math.max(-89, Math.min(89, Number(f.sx.value) || 0)), sy: Math.max(-89, Math.min(89, Number(f.sy.value) || 0)) };
     };
+  }, (form) => {
+    // Start on the first size field, ready to type.
+    form.elements.rw.focus();
+    form.elements.rw.select();
   });
   return value === 'ok' ? result : null;
 }

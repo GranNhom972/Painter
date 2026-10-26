@@ -18,7 +18,7 @@ test('rectangle selection shows its size and handles', async ({ page }) => {
   const st = await state(page);
   expect(st.tool).toBe('select-rect');
   expect(st.selection).toMatchObject({ x: 10, y: 10, w: 60, h: 40, floating: false });
-  await expect(page.locator('[data-testid=stat-sel]')).toHaveText('60 × 40px');
+  await expect(page.locator('[data-testid=stat-sel]')).toHaveText('60 x 40px');
   await expect(page.locator('[data-testid=btn-crop]')).toBeEnabled();
   // Hovering a corner shows a resize cursor, inside a move cursor.
   const corner = await toScreen(page, 70, 50);
@@ -122,7 +122,7 @@ test('crop to selection', async ({ page }) => {
   await page.click('[data-testid=btn-crop]');
   const st = await state(page);
   expect([st.width, st.height]).toEqual([40, 30]);
-  await expect(page.locator('[data-testid=stat-canvas]')).toHaveText('40 × 30px');
+  await expect(page.locator('[data-testid=stat-canvas]')).toHaveText('40 x 30px');
   expect(await pixel(page, 0, 0)).toBe('#ed1c24');
   await expect(page.locator('[data-testid=btn-crop]')).toBeDisabled();
   await page.keyboard.press('Control+z');

@@ -80,9 +80,84 @@ test('desktop app boots with the WebAssembly engine and Tauri APIs', async () =>
     assert.equal(info.desktop, true);
     assert.equal(info.wasm, 'object');
     assert.match(info.title, /Paint - /);
-    const shot = await wd('GET', `/session/${s.id}/screenshot`);
-    await writeFile(join(dir, 'desktop.png'), Buffer.from(shot, 'base64'));
-    assert.ok(Buffer.from(shot, 'base64').length > 1000);
+    // No WebDriver screenshot: WebKitWebDriver cannot capture a frameless window.
+  } finally {
+    await s.close();
+  }
+});
+
+test('frameless window with the Windows 11 style title bar', async () => {
+  const s = await session();
+  try {
+    const r = await s.run(`
+      window.paint.flush();
+      const bar = document.getElementById('titlebar');
+      const win = window.__TAURI__.window.getCurrentWindow();
+      // Record what the buttons do (really minimizing needs a window manager).
+      const sent = [];
+      const actions = window.paint.windowActions;
+      const saved = { ...actions };
+      actions.minimize = () => sent.push('minimize');
+      actions.toggleMaximize = () => sent.push('toggleMaximize');
+      document.querySelector('[data-win=minimize]').click();
+      document.querySelector('[data-win=maximize]').click();
+      Object.assign(actions, saved);
+      return {
+        shown: !bar.hidden && bar.offsetHeight,
+        title: document.getElementById('winTitle').textContent,
+        doc: document.title,
+        decorated: await win.isDecorated(),
+        edges: document.querySelectorAll('.resize-edge').length,
+        buttons: [...bar.querySelectorAll('.caption-btn svg')].length,
+        sent,
+      };`);
+    assert.equal(r.shown, 32);
+    assert.equal(r.title, r.doc);
+    assert.match(r.title, /^Paint - /);
+    assert.equal(r.decorated, false);
+    assert.equal(r.edges, 8);
+    assert.equal(r.buttons, 3);
+    assert.deepEqual(r.sent, ['minimize', 'toggleMaximize']);
+  } finally {
+    await s.close();
+  }
+});
+
+test('the title bar close button still asks to save changes', async () => {
+  const s = await session();
+  try {
+    const open = await s.run(`
+      const e = window.paint.engine;
+      e.set_tool('pencil'); e.pointer_down(3, 3, 0, false, false, false); e.pointer_up(3, 3);
+      window.paint.flush();
+      document.querySelector('[data-win=close]').click();
+      for (let i = 0; i < 50 && !document.getElementById('dlgConfirm').open; i++) await new Promise((r) => setTimeout(r, 50));
+      const open = document.getElementById('dlgConfirm').open;
+      document.querySelector('[data-testid=confirm-cancel]').click();
+      // Let the test session close the window afterwards without asking again.
+      e.mark_saved();
+      return open;`);
+    assert.equal(open, true);
+  } finally {
+    await s.close();
+  }
+});
+
+test('mouse Back/Forward buttons undo and redo', async () => {
+  const s = await session();
+  try {
+    const r = await s.run(`
+      const p = window.paint, e = p.engine;
+      e.set_tool('pencil'); e.pointer_down(5, 5, 0, false, false, false); e.pointer_move(30, 5, false, false, false); e.pointer_up(30, 5);
+      const fire = (button) => {
+        window.dispatchEvent(new MouseEvent('mousedown', { button, bubbles: true }));
+        window.dispatchEvent(new MouseEvent('mouseup', { button, bubbles: true }));
+      };
+      fire(3);
+      const undone = e.pixel(10, 5);
+      fire(4);
+      return [undone, e.pixel(10, 5)];`);
+    assert.deepEqual(r, ['#ffffff', '#000000']);
   } finally {
     await s.close();
   }
@@ -109,7 +184,9 @@ test('real mouse input draws in the WebKitGTK window', async () => {
         ],
       },
     ]);
-    const px = await s.run('return [window.paint.engine.pixel(70, 20), window.paint.engine.pixel(70, 40)];');
+    // Screen pixels are image pixels divided by the zoom (the picture may be fitted).
+    const px = await s.run(`const z = window.paint.view.zoom;
+      return [window.paint.engine.pixel(Math.floor(70 / z), Math.floor(20.5 / z)), window.paint.engine.pixel(Math.floor(70 / z), Math.floor(40 / z))];`);
     assert.deepEqual(px, ['#000000', '#ffffff']);
   } finally {
     await s.close();
@@ -243,7 +320,9 @@ test('closing with unsaved changes asks for confirmation', async () => {
       const open = document.getElementById('dlgConfirm').open;
       document.querySelector('[data-testid=confirm-cancel]').click();
       await new Promise((r) => setTimeout(r, 100));
-      return { open, stillHere: !!window.paint, closed: document.getElementById('dlgConfirm').open };`);
+      const result = { open, stillHere: !!window.paint, closed: document.getElementById('dlgConfirm').open };
+      e.mark_saved();
+      return result;`);
     assert.equal(r.open, true);
     assert.equal(r.stillHere, true);
     assert.equal(r.closed, false);

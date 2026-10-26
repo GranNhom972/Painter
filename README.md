@@ -43,6 +43,13 @@ L'interface se contente de lui transmettre les événements de pointeur et les c
   fenêtre), règles, quadrillage, barre d'état, plein écran, thème clair/sombre, français/anglais.
 - **Fichiers** : ouvrir, enregistrer, enregistrer sous (7 formats), imprimer, glisser-déposer,
   confirmation des modifications non enregistrées (y compris à la fermeture).
+- **Annuler / Rétablir** : flèches à côté d'Enregistrer, Ctrl+Z / Ctrl+Y, boutons Précédent / Suivant
+  de la souris, et dans la version web les boutons Précédent / Suivant du navigateur (la page
+  n'est pas quittée).
+- **Fenêtre (Linux)** : barre de titre intégrée comme Windows 11 (icône, titre, Réduire,
+  Agrandir/Restaurer, Fermer), déplacement par la barre, redimensionnement par les bords.
+- **Icônes** : celles de Paint Windows 11 en SVG — glyphes Fluent UI System Icons de Microsoft
+  (licence MIT, voir `ui/icons/LICENSE-fluent.txt`) et pictogrammes propres à Paint redessinés.
 
 ## Lancer Paint
 

@@ -40,7 +40,7 @@ test('open an image with the file chooser', async ({ page }) => {
   await expect.poll(async () => (await state(page)).width).toBe(64);
   expect(await pixel(page, 10, 10)).toBe('#3f48cc');
   await expect(page).toHaveTitle('Paint - bleu.png');
-  await expect(page.locator('[data-testid=stat-canvas]')).toHaveText('64 × 48px');
+  await expect(page.locator('[data-testid=stat-canvas]')).toHaveText('64 x 48px');
   expect((await state(page)).can_undo).toBe(false);
 });
 

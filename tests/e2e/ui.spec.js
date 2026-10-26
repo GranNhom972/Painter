@@ -9,7 +9,7 @@ test('ribbon groups match Paint, without Image Creator', async ({ page }) => {
   expect(labels).toEqual(['Sélection', 'Image', 'Outils', 'Pinceaux', 'Formes', 'Taille', 'Couleurs', 'Calques']);
   await expect(page.locator('text=Image Creator')).toHaveCount(0);
   await expect(page.locator('[data-testid=palette] .chip')).toHaveCount(30);
-  await expect(page.locator('[data-testid=stat-canvas]')).toHaveText('1152 × 648px');
+  await expect(page.locator('[data-testid=stat-canvas]')).toHaveText('1152 x 648px');
   await expect(page).toHaveTitle('Paint - Sans titre');
 });
 
@@ -40,7 +40,7 @@ test('menus open, close with Escape and switch on hover', async ({ page }) => {
 test('pointer position and title update', async ({ page }) => {
   const s = await toScreen(page, 120, 45);
   await page.mouse.move(s.x, s.y);
-  await expect(page.locator('[data-testid=stat-pos]')).toHaveText('120, 45px');
+  await expect(page.locator('[data-testid=stat-pos]')).toHaveText('120,45px');
   await page.mouse.down();
   await page.mouse.move(s.x + 20, s.y + 5);
   await page.mouse.up();

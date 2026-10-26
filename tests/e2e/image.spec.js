@@ -30,7 +30,7 @@ test('rotate right, left and 180 degrees', async ({ page }) => {
   await page.click('[data-testid=btn-rotate]');
   await page.click('[data-testid=mi-rotate-180]');
   expect(await pixel(page, 195, 95)).toBe('#ed1c24');
-  await expect(page.locator('[data-testid=stat-canvas]')).toHaveText('200 × 100px');
+  await expect(page.locator('[data-testid=stat-canvas]')).toHaveText('200 x 100px');
 });
 
 test('flip vertical and horizontal', async ({ page }) => {

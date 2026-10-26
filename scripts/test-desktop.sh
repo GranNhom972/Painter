@@ -9,11 +9,16 @@ npm run build:wasm >/dev/null
 cargo build -p paint
 export TAURI_DRIVER="${TAURI_DRIVER:-$(command -v tauri-driver || echo "$HOME/.cargo/bin/tauri-driver")}"
 export WEBKIT_WEBDRIVER="${WEBKIT_WEBDRIVER:-$(command -v WebKitWebDriver || echo /usr/bin/WebKitWebDriver)}"
-if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
-  XVFB="${XVFB:-$(command -v Xvfb)}"
-  "$XVFB" :99 -screen 0 1400x900x24 -nolisten tcp >/dev/null 2>&1 &
-  trap 'kill $!' EXIT
-  export DISPLAY=:99
-  sleep 1
+# Use a private X server unless HEADED=1: the test windows must not pop up on
+# the user's desktop (GTK would otherwise pick the Wayland session by default).
+if [ "${HEADED:-0}" != 1 ]; then
+  if [ "${DISPLAY:-}" != ":99" ]; then
+    XVFB="${XVFB:-$(command -v Xvfb)}"
+    "$XVFB" :99 -screen 0 1400x900x24 -nolisten tcp >/dev/null 2>&1 &
+    trap 'kill $!' EXIT
+    sleep 1
+  fi
+  export DISPLAY=:99 GDK_BACKEND=x11
+  unset WAYLAND_DISPLAY
 fi
 exec dbus-run-session -- node --test --test-concurrency=1 tests/desktop/desktop.test.mjs
