@@ -1,0 +1,107 @@
+# Publie une Release GitHub avec les paquets Linux (x86_64 et arm64) quand un tag de version est poussé :
+#   git tag v1.0.0 && git push origin v1.0.0
+# Le tag doit correspondre à la version de Cargo.toml, package.json et src-tauri/tauri.conf.json.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    strategy:
+      matrix:
+        include:
+          # La plus ancienne Ubuntu prise en charge : les paquets construits ici s'installent aussi
+          # sur les distributions plus récentes (l'inverse n'est pas vrai, à cause de la glibc).
+          - runner: ubuntu-22.04
+            arch: x86_64
+            wasm_pack_sum: c539d91ccab2591a7e975bcf82c82e1911b03335c80aa83d67ad25ed2ad06539
+          - runner: ubuntu-22.04-arm
+            arch: aarch64
+            wasm_pack_sum: 2e65038769f8bbaa5fc237ad4bb523e692df99458cbd3e3d92525b89d8762379
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bibliothèques système (WebKitGTK)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config curl file \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev
+
+      - name: Rust 1.99 et cible WebAssembly
+        run: |
+          if ! command -v rustup >/dev/null; then
+            curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            export PATH="$HOME/.cargo/bin:$PATH"
+          fi
+          rustup toolchain install 1.99.0 --profile minimal --target wasm32-unknown-unknown
+          rustup default 1.99.0
+
+      - name: wasm-pack 0.13.1 (archive vérifiée)
+        run: |
+          name=wasm-pack-v0.13.1-${{ matrix.arch }}-unknown-linux-musl
+          curl -fsSL -o /tmp/wasm-pack.tgz "https://github.com/rustwasm/wasm-pack/releases/download/v0.13.1/$name.tar.gz"
+          echo "${{ matrix.wasm_pack_sum }}  /tmp/wasm-pack.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/wasm-pack.tgz -C /usr/local/bin --strip-components=1 "$name/wasm-pack"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-${{ matrix.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Tests du moteur
+        run: cargo test -p paint-core --locked
+
+      - name: Paquets .deb, .rpm, AppImage et archive
+        run: scripts/release-linux.sh "$GITHUB_REF_NAME"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paint-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  # Une seule publication, quand les deux architectures sont prêtes : jamais de Release incomplète.
+  publish:
+    needs: linux
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          cat SHA256SUMS_* > SHA256SUMS
+          rm SHA256SUMS_*
+          ls -l
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" ./* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" ./* \
+              --title "Paint ${GITHUB_REF_NAME#v}" --notes-file ../.github/release-notes.md
+          fi

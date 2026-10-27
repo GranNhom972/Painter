@@ -90,20 +90,36 @@ seule, sans capacités système, et redémarre tout seul avec Docker (`restart: 
 
 ## Installation sous Linux
 
-Après la compilation (voir ci-dessous), les paquets sont dans `target/release/bundle/` :
+Téléchargez le paquet de la dernière version sur la page
+[Releases](https://github.com/GranNhom972/Painter/releases/latest), puis :
 
-```bash
-sudo apt install ./target/release/bundle/deb/Paint_1.0.0_amd64.deb
-```
+| Distribution | x86_64 (PC Intel/AMD) | arm64 (Raspberry Pi, ARM) | Installation |
+|---|---|---|---|
+| Debian, Ubuntu, Linux Mint… | [`Paint_amd64.deb`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_amd64.deb) | [`Paint_arm64.deb`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_arm64.deb) | `sudo apt install ./Paint_amd64.deb` |
+| Fedora, openSUSE, RHEL… | [`Paint_x86_64.rpm`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_x86_64.rpm) | [`Paint_aarch64.rpm`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_aarch64.rpm) | `sudo dnf install ./Paint_x86_64.rpm` |
+| Arch, Manjaro, Gentoo, autres | [`Paint_linux_x86_64.tar.gz`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_linux_x86_64.tar.gz) | [`Paint_linux_aarch64.tar.gz`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_linux_aarch64.tar.gz) | `tar xzf Paint_linux_*.tar.gz && sudo Paint-*/install.sh` |
+| Sans installation | [`Paint_x86_64.AppImage`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_x86_64.AppImage) | [`Paint_aarch64.AppImage`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_aarch64.AppImage) | `chmod +x Paint_*.AppImage && ./Paint_*.AppImage` |
 
-ou, sans installation :
+`uname -m` indique votre processeur. Les paquets sont construits sur Ubuntu 22.04 : ils s'installent
+aussi sur les distributions plus récentes. Paint apparaît dans le menu des applications avec son
+icône, et dans « Ouvrir avec » pour les images PNG, JPEG, BMP, GIF, TIFF, WEBP et ICO. L'archive
+s'installe aussi sans droits administrateur (`install.sh --user`) et se désinstalle avec
+`install.sh --uninstall`. Après une compilation locale (voir ci-dessous), les mêmes paquets sont dans
+`target/release/bundle/`.
 
-```bash
-./target/release/bundle/appimage/Paint_1.0.0_amd64.AppImage
-```
+### Publier une version
 
-Le paquet .deb déclare Paint comme éditeur des fichiers PNG, JPEG, BMP, GIF, TIFF, WEBP et ICO
-(menu « Ouvrir avec »).
+1. Mettez le nouveau numéro dans `Cargo.toml`, `package.json` et `src-tauri/tauri.conf.json`, puis commitez.
+2. Poussez le tag correspondant :
+
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+GitHub Actions (`.github/workflows/release.yml`) teste le moteur, construit le .deb, le .rpm et
+l'AppImage, puis publie la Release avec leurs sommes de contrôle. Un tag qui ne correspond pas à la
+version est refusé. `scripts/release-linux.sh` produit les mêmes fichiers en local, dans `dist/`.
 
 ## Compilation
 
