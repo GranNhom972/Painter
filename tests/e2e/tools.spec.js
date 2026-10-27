@@ -5,7 +5,7 @@ import { openApp, state, pixel, screenPixel, drag, clickAt, openRibbonMenu, rect
 
 test.beforeEach(async ({ page }) => openApp(page));
 
-test('pencil draws with colour 1 (left) and colour 2 (right)', async ({ page }) => {
+test('pencil: left click uses the selected colour slot, right click the other one', async ({ page }) => {
   await page.click('[data-testid=tool-pencil]');
   await expect(page.locator('[data-testid=tool-pencil]')).toHaveClass(/active/);
   await drag(page, [[10, 10], [60, 10]]);
@@ -13,8 +13,14 @@ test('pencil draws with colour 1 (left) and colour 2 (right)', async ({ page }) 
   expect(await screenPixel(page, 30, 10)).toBe('#000000');
   await page.click('[data-testid=color2]');
   await page.click('[data-testid=palette-3]'); // red into colour 2
-  await drag(page, [[10, 30], [60, 30]], { button: 'right' });
+  await drag(page, [[10, 30], [60, 30]]);
   expect(await pixel(page, 30, 30)).toBe('#ed1c24');
+  // Colour 2 selected: the right button now uses colour 1.
+  await drag(page, [[10, 50], [60, 50]], { button: 'right' });
+  expect(await pixel(page, 30, 50)).toBe('#000000');
+  await page.click('[data-testid=color1]');
+  await drag(page, [[10, 70], [60, 70]], { button: 'right' });
+  expect(await pixel(page, 30, 70)).toBe('#ed1c24');
   // No context menu after drawing with the right button.
   await expect(page.locator('.popup')).toHaveCount(0);
 });
@@ -73,21 +79,29 @@ test('fill bucket and colour picker', async ({ page }) => {
   await clickAt(page, 60, 60);
   expect(await pixel(page, 60, 60)).toBe('#3f48cc');
   expect(await pixel(page, 10, 10)).toBe('#ffffff');
-  // Right click fills with colour 2.
+  // With colour 2 selected, a left click fills with colour 2.
   await page.click('[data-testid=color2]');
   await page.click('[data-testid=palette-5]'); // yellow
-  await clickAt(page, 10, 10, { button: 'right' });
+  await clickAt(page, 10, 10);
   expect(await pixel(page, 10, 10)).toBe('#fff200');
-  // Picker takes colours from the canvas and returns to the fill tool.
+  // The picker fills the selected slot (colour 2 here) and returns to the fill tool.
   await page.click('[data-testid=tool-picker]');
   await clickAt(page, 60, 60);
   let st = await state(page);
-  expect(st.color1).toBe('#3f48cc');
+  expect([st.color1, st.color2]).toEqual(['#3f48cc', '#3f48cc']);
   expect(st.tool).toBe('fill');
+  await page.click('[data-testid=tool-picker]');
+  await clickAt(page, 10, 10, { button: 'right' }); // right click: the other slot
+  st = await state(page);
+  expect([st.color1, st.color2]).toEqual(['#fff200', '#3f48cc']);
+  // Colour 1 selected: left click picks into colour 1, right click into colour 2.
+  await page.click('[data-testid=color1]');
+  await page.click('[data-testid=tool-picker]');
+  await clickAt(page, 60, 60);
   await page.click('[data-testid=tool-picker]');
   await clickAt(page, 10, 10, { button: 'right' });
   st = await state(page);
-  expect(st.color2).toBe('#fff200');
+  expect([st.color1, st.color2]).toEqual(['#3f48cc', '#fff200']);
 });
 
 test('magnifier zooms in with left click and out with right click', async ({ page }) => {
@@ -123,6 +137,7 @@ test('text tool: type, style and apply', async ({ page }) => {
   await page.click('[data-testid=text-opaque]');
   await page.click('[data-testid=color2]');
   await page.click('[data-testid=palette-5]');
+  await page.click('[data-testid=color1]');
   await clickAt(page, 300, 200);
   await page.keyboard.type('Hi');
   await clickAt(page, 600, 400);

@@ -3,6 +3,9 @@
 
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 8;
+/** Tools whose left click uses the selected colour slot. */
+const SLOT_TOOLS = new Set(['pencil', 'brush', 'fill', 'shape', 'picker']);
+
 export const ZOOM_PRESETS = [0.125, 0.25, 0.5, 1, 2, 3, 4, 5, 6, 7, 8];
 
 const cursorSvg = (body, hx, hy) =>
@@ -508,7 +511,12 @@ export class View {
     this.viewport.setPointerCapture(e.pointerId);
     this.dragging = true;
     this.pointer = p;
-    this.engine.pointer_down(p.x, p.y, e.button, e.shiftKey, e.ctrlKey || e.metaKey, e.altKey);
+    // Drawing tools use the selected colour slot for a left click and the other
+    // one for a right click: with colour 2 selected, the buttons swap. The eraser
+    // (always erases to colour 2) and the selection tools keep their own rules.
+    const swap = this.app.activeSlot === 2 && SLOT_TOOLS.has(st.tool);
+    const button = swap ? 2 - e.button : e.button;
+    this.engine.pointer_down(p.x, p.y, button, e.shiftKey, e.ctrlKey || e.metaKey, e.altKey);
     if (st.tool === 'brush' && st.brush === 'airbrush') {
       clearInterval(this.airbrushTimer);
       this.airbrushTimer = setInterval(() => {

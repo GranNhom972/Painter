@@ -43,7 +43,7 @@ L'interface se contente de lui transmettre les événements de pointeur et les c
   de l'arrière-plan, propriétés (taille du canevas), poignées de redimensionnement du canevas sur les 8 côtés.
 - **Calques** : ajouter, dupliquer, fusionner vers le bas, supprimer, masquer, réordonner
   (boutons ou glisser), renommer, miniatures.
-- **Couleurs** : couleur 1 et 2, palette de 20 couleurs + 10 personnalisées, éditeur TSV/RVB/hex.
+- **Couleurs** : couleur 1 et 2 (le clic gauche utilise la couleur sélectionnée, le clic droit l’autre), palette de 20 couleurs + 10 personnalisées, éditeur TSV/RVB/hex.
 - **Affichage** : zoom de 10 % à 800 % (molette + Ctrl, curseur, préréglages, ajuster à la
   fenêtre), règles, quadrillage, barre d'état, plein écran, thème clair/sombre, français/anglais.
 - **Fichiers** : ouvrir, enregistrer, enregistrer sous (7 formats), imprimer, glisser-déposer,

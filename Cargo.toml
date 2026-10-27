@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/paint-core", "crates/paint-wasm", "src-tauri"]
 
 [workspace.package]
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 authors = ["Paint contributors"]
 

@@ -406,6 +406,12 @@ export class App {
     this.changed();
   }
 
+  /** [main, other] colours: the selected slot (red box) for a left click, the other one for a right click. */
+  slotColors() {
+    const st = this.state;
+    return this.activeSlot === 1 ? [st.color1, st.color2] : [st.color2, st.color1];
+  }
+
   setColor(hex, slot = this.activeSlot) {
     if (slot === 1) this.engine.set_color1(hex);
     else this.engine.set_color2(hex);

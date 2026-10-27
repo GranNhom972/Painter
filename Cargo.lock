@@ -2292,7 +2292,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "paint"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "arboard",
  "gtk",
@@ -2306,7 +2306,7 @@ dependencies = [
 
 [[package]]
 name = "paint-core"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "image",
  "serde",
@@ -2315,7 +2315,7 @@ dependencies = [
 
 [[package]]
 name = "paint-wasm"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "console_error_panic_hook",
  "paint-core",

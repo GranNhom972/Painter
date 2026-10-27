@@ -110,8 +110,9 @@ export class TextTool {
     const z = this.app.view.zoom;
     b.style.font = this.fontString(z);
     b.style.lineHeight = '1.2';
-    b.style.color = st ? st.color1 : '#000';
-    b.style.background = this.opts.opaque && st ? st.color2 : 'transparent';
+    const [fg, bg] = st ? this.app.slotColors() : ['#000', '#fff'];
+    b.style.color = fg;
+    b.style.background = this.opts.opaque ? bg : 'transparent';
     const deco = [this.opts.underline && 'underline', this.opts.strike && 'line-through'].filter(Boolean).join(' ');
     b.style.textDecoration = deco || 'none';
     this.autosize();
@@ -177,18 +178,18 @@ export class TextTool {
     const text = this.box.value;
     this.cancel();
     if (!text.trim() && !this.opts.opaque) return;
-    const st = this.app.state;
+    const [fg, bg] = this.app.slotColors();
     const m = this.measure(text);
     const cv = document.createElement('canvas');
     cv.width = Math.max(1, m.width);
     cv.height = Math.max(1, m.height);
     const ctx = cv.getContext('2d');
     if (this.opts.opaque) {
-      ctx.fillStyle = st.color2;
+      ctx.fillStyle = bg;
       ctx.fillRect(0, 0, cv.width, cv.height);
     }
     ctx.font = this.fontString();
-    ctx.fillStyle = st.color1;
+    ctx.fillStyle = fg;
     ctx.textBaseline = 'middle';
     const lh = this.opts.size * 1.2;
     const thick = Math.max(1, Math.round(this.opts.size / 15));

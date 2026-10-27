@@ -47,6 +47,7 @@ test('outline and fill styles use colour 1 and colour 2', async ({ page }) => {
   await page.click('[data-testid=mi-fill-solid]');
   await page.click('[data-testid=color2]');
   await page.click('[data-testid=palette-6]');
+  await page.click('[data-testid=color1]');
   await drag(page, [[20, 20], [80, 60]]);
   expect(await pixel(page, 20, 20)).toBe('#000000');
   expect(await pixel(page, 50, 40)).toBe('#22b14c');
@@ -118,6 +119,7 @@ test('polygon: clicks then close on the first point; double click also closes', 
   // Second polygon closed by a double click, filled with green.
   await page.click('[data-testid=color2]');
   await page.click('[data-testid=palette-6]');
+  await page.click('[data-testid=color1]');
   await drag(page, [[400, 50], [600, 50]]);
   await clickAt(page, 500, 250);
   await clickAt(page, 500, 250, { clickCount: 2 });
