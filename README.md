@@ -4,6 +4,11 @@
 Le moteur de dessin est compilé en **WebAssembly**. L'application de bureau
 multiplateforme utilise **Tauri**. Linux est la cible prioritaire (.deb, .rpm, AppImage).
 
+![Paint sous Linux : une photo de la plage des Salines ouverte dans l'application](docs/capture.webp)
+
+<sub>Application de bureau sous Linux. Photo : plage des Salines (Martinique), Nicolas Bouthors,
+domaine public, [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Martinique_Beach_%28Salines%29.jpg).</sub>
+
 ## Architecture
 
 ```
