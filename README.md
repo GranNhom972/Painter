@@ -1,187 +1,187 @@
 # Paint
 
-Éditeur d'images matricielles inspiré de Paint pour Windows 11, écrit en **Rust**.
-Le moteur de dessin est compilé en **WebAssembly**. L'application de bureau
-multiplateforme utilise **Tauri**. Linux est la cible prioritaire (.deb, .rpm, AppImage).
+A raster image editor inspired by Paint for Windows 11, written in **Rust**.
+The drawing engine is compiled to **WebAssembly**. The cross-platform desktop app
+uses **Tauri**. Linux is the primary target (.deb, .rpm, AppImage).
 
-![Paint sous Linux : une photo de la plage des Salines ouverte dans l'application](docs/capture.webp)
+![Paint on Linux: a photo of Les Salines beach opened in the app](docs/capture.webp)
 
-<sub>Application de bureau sous Linux. Photo : plage des Salines (Martinique), Nicolas Bouthors,
-domaine public, [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Martinique_Beach_%28Salines%29.jpg).</sub>
+<sub>Desktop app on Linux. Photo: Les Salines beach (Martinique), Nicolas Bouthors,
+public domain, [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Martinique_Beach_%28Salines%29.jpg).</sub>
 
 ## Architecture
 
 ```
-crates/paint-core   Moteur en Rust pur : calques, outils, pinceaux, formes, sélection,
-                    historique (annuler/rétablir), presse-papiers, codecs (PNG, JPEG, BMP,
-                    GIF, TIFF, WEBP, ICO). Aucune dépendance au navigateur, entièrement testé.
-crates/paint-wasm   Liaisons wasm-bindgen : le moteur compilé en WebAssembly (ui/pkg).
-ui/                 Interface (HTML/CSS/JS) qui transmet les événements au moteur et
-                    affiche l'image directement depuis la mémoire WebAssembly.
-src-tauri/          Application de bureau en Rust (Tauri 2) : fenêtre, presse-papiers
-                    système (GTK sous Linux, arboard sous Windows/macOS), fichiers,
-                    boîtes de dialogue, ouverture d'un fichier passé en ligne de commande.
+crates/paint-core   Pure Rust engine: layers, tools, brushes, shapes, selection,
+                    history (undo/redo), clipboard, codecs (PNG, JPEG, BMP,
+                    GIF, TIFF, WEBP, ICO). No browser dependency, fully tested.
+crates/paint-wasm   wasm-bindgen bindings: the engine compiled to WebAssembly (ui/pkg).
+ui/                 User interface (HTML/CSS/JS) that forwards events to the engine and
+                    displays the image directly from WebAssembly memory.
+src-tauri/          Rust desktop app (Tauri 2): window, system clipboard
+                    (GTK on Linux, arboard on Windows/macOS), files,
+                    dialogs, opening a file passed on the command line.
 ```
 
-Toute la logique (outils, sélection, poignées, historique) se trouve dans le moteur Rust.
-L'interface se contente de lui transmettre les événements de pointeur et les commandes.
+All the logic (tools, selection, handles, history) lives in the Rust engine.
+The interface simply forwards pointer events and commands to it.
 
-## Fonctionnalités
+## Features
 
-- **Sélection** : rectangle et forme libre ; déplacement, copie (Ctrl+glisser), redimensionnement
-  avec 8 poignées (Maj = proportions), flèches du clavier, sélectionner tout, inverser, supprimer,
-  sélection transparente, rogner, menu contextuel (clic droit).
-- **Presse-papiers système** : couper/copier/coller des images entre Paint et les autres
-  applications ; le collage d'une image plus grande que le canevas l'agrandit ; « Coller depuis un fichier ».
-- **Outils** : crayon, remplissage (tolérance), texte (police, taille, gras, italique, souligné,
-  barré, fond opaque), gomme (clic droit = remplacement de couleur), sélecteur de couleur, loupe.
-- **Pinceaux** : pinceau, calligraphie 1 et 2, aérographe, huile, pastel, marqueur, crayon naturel, aquarelle.
-- **Formes (23)** : ligne, courbe (2 inflexions), ovale, rectangles, polygone, triangles, losange,
-  pentagone, hexagone, 4 flèches, 3 étoiles, 3 bulles, cœur, éclair ; contour/remplissage ;
-  forme modifiable (déplacer, redimensionner, recolorer) jusqu'à validation.
-- **Image** : rogner, redimensionner et incliner, rotations, retournements, suppression
-  de l'arrière-plan, propriétés (taille du canevas), poignées de redimensionnement du canevas sur les 8 côtés.
-- **Calques** : ajouter, dupliquer, fusionner vers le bas, supprimer, masquer, réordonner
-  (boutons ou glisser), renommer, miniatures.
-- **Couleurs** : couleur 1 et 2 (le clic gauche utilise la couleur sélectionnée, le clic droit l’autre), palette de 20 couleurs + 10 personnalisées, éditeur TSV/RVB/hex.
-- **Affichage** : zoom de 10 % à 800 % (molette + Ctrl, curseur, préréglages, ajuster à la
-  fenêtre), règles, quadrillage, barre d'état, plein écran, thème clair/sombre, français/anglais.
-- **Fichiers** : ouvrir, enregistrer, enregistrer sous (7 formats), imprimer, glisser-déposer,
-  confirmation des modifications non enregistrées (y compris à la fermeture).
-- **Annuler / Rétablir** : flèches à côté d'Enregistrer, Ctrl+Z / Ctrl+Y, boutons Précédent / Suivant
-  de la souris, et dans la version web les boutons Précédent / Suivant du navigateur (la page
-  n'est pas quittée).
-- **Fenêtre (Linux)** : barre de titre intégrée comme Windows 11 (icône, titre, Réduire,
-  Agrandir/Restaurer, Fermer), déplacement par la barre, redimensionnement par les bords.
-- **Icônes** : celles de Paint Windows 11 en SVG — glyphes Fluent UI System Icons de Microsoft
-  (licence MIT, voir `ui/icons/LICENSE-fluent.txt`) et pictogrammes propres à Paint redessinés.
+- **Selection**: rectangle and free-form; move, copy (Ctrl+drag), resize with
+  8 handles (Shift = keep proportions), arrow keys, select all, invert, delete,
+  transparent selection, crop, context menu (right-click).
+- **System clipboard**: cut/copy/paste images between Paint and other
+  applications; pasting an image larger than the canvas enlarges it; "Paste from file".
+- **Tools**: pencil, fill (tolerance), text (font, size, bold, italic, underline,
+  strikethrough, opaque background), eraser (right-click = color replacement), color picker, magnifier.
+- **Brushes**: brush, calligraphy 1 and 2, airbrush, oil, crayon, marker, natural pencil, watercolor.
+- **Shapes (23)**: line, curve (2 bends), oval, rectangles, polygon, triangles, diamond,
+  pentagon, hexagon, 4 arrows, 3 stars, 3 callouts, heart, lightning; outline/fill;
+  shape stays editable (move, resize, recolor) until committed.
+- **Image**: crop, resize and skew, rotations, flips, background
+  removal, properties (canvas size), canvas resize handles on all 8 sides.
+- **Layers**: add, duplicate, merge down, delete, hide, reorder
+  (buttons or drag), rename, thumbnails.
+- **Colors**: color 1 and 2 (left-click uses the selected color, right-click the other one), 20-color palette + 10 custom colors, HSV/RGB/hex editor.
+- **View**: zoom from 10% to 800% (Ctrl + mouse wheel, slider, presets, fit to
+  window), rulers, gridlines, status bar, full screen, light/dark theme, French/English.
+- **Files**: open, save, save as (7 formats), print, drag and drop,
+  unsaved-changes confirmation (including on close).
+- **Undo / Redo**: arrows next to Save, Ctrl+Z / Ctrl+Y, mouse Back / Forward
+  buttons, and in the web version the browser's Back / Forward buttons (the page
+  is not left).
+- **Window (Linux)**: built-in title bar like Windows 11 (icon, title, Minimize,
+  Maximize/Restore, Close), drag by the title bar, resize from the edges.
+- **Icons**: those of Windows 11 Paint as SVG — Microsoft Fluent UI System Icons glyphs
+  (MIT license, see `ui/icons/LICENSE-fluent.txt`) and redrawn Paint-specific pictograms.
 
-## Lancer Paint
+## Running Paint
 
 ```bash
-./run --web        # version web : compile le moteur WASM, sert l'appli et ouvre le navigateur
-./run --linux      # application de bureau Linux (ajouter --release pour la version optimisée)
+./run --web        # web version: builds the WASM engine, serves the app and opens the browser
+./run --linux      # Linux desktop app (add --release for the optimized build)
 ```
 
-Autres modes : `./run --package` (paquets .deb/.rpm/AppImage), `./run --web-build [dossier]`
-(site statique à héberger), `./run --test` (toutes les suites de tests), `./run --help`.
-`./run --web --host 0.0.0.0 --port 8080` rend la version web accessible sur le réseau local.
+Other modes: `./run --package` (.deb/.rpm/AppImage packages), `./run --web-build [folder]`
+(static site to host), `./run --test` (all test suites), `./run --help`.
+`./run --web --host 0.0.0.0 --port 8080` makes the web version reachable on the local network.
 
-La version web est une application installable (PWA) : bouton « Installer » du navigateur.
-Une fois chargée, elle fonctionne hors ligne. Elle s'ouvre aussi avec « Ouvrir avec » pour les images.
+The web version is an installable app (PWA): use the browser's "Install" button.
+Once loaded, it works offline. It also shows up in "Open with" for images.
 
-### Avec Docker
+### With Docker
 
 ```bash
-docker compose up -d      # construit l'image et démarre Paint : http://localhost:8088/
-docker compose down       # arrête Paint
+docker compose up -d      # builds the image and starts Paint: http://localhost:8088/
+docker compose down       # stops Paint
 ```
 
-Aucun outil n'est nécessaire en dehors de Docker : l'image compile le moteur Rust en
-WebAssembly, puis sert la version web avec nginx. Le conteneur tourne sans root, en lecture
-seule, sans capacités système, et redémarre tout seul avec Docker (`restart: unless-stopped`).
-`./run --docker` fait la même chose puis ouvre le navigateur.
+Nothing but Docker is needed: the image compiles the Rust engine to
+WebAssembly, then serves the web version with nginx. The container runs as non-root, read-only,
+with no system capabilities, and restarts automatically with Docker (`restart: unless-stopped`).
+`./run --docker` does the same, then opens the browser.
 
-- Autre port : `PAINT_PORT=9000 docker compose up -d`.
-- Par défaut, Paint n'écoute que sur la machine locale. `PAINT_HOST=0.0.0.0` l'ouvre au réseau ;
-  le presse-papiers et le mode hors ligne exigent alors HTTPS (proxy inverse devant le conteneur),
-  car les navigateurs ne les autorisent qu'en HTTPS ou sur `localhost`.
-- Sans Compose : `docker build -t paint . && docker run -d -p 127.0.0.1:8088:8080 paint`.
+- Different port: `PAINT_PORT=9000 docker compose up -d`.
+- By default, Paint only listens on the local machine. `PAINT_HOST=0.0.0.0` opens it to the network;
+  the clipboard and offline mode then require HTTPS (a reverse proxy in front of the container),
+  because browsers only allow them over HTTPS or on `localhost`.
+- Without Compose: `docker build -t paint . && docker run -d -p 127.0.0.1:8088:8080 paint`.
 
-## Installation sous Linux
+## Installing on Linux
 
-Téléchargez le paquet de la dernière version sur la page
-[Releases](https://github.com/GranNhom972/Painter/releases/latest), puis :
+Download the package for the latest version from the
+[Releases](https://github.com/GranNhom972/Painter/releases/latest) page, then:
 
-| Distribution | x86_64 (PC Intel/AMD) | arm64 (Raspberry Pi, ARM) | Installation |
+| Distribution | x86_64 (Intel/AMD PC) | arm64 (Raspberry Pi, ARM) | Installation |
 |---|---|---|---|
 | Debian, Ubuntu, Linux Mint… | [`Paint_amd64.deb`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_amd64.deb) | [`Paint_arm64.deb`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_arm64.deb) | `sudo apt install ./Paint_amd64.deb` |
 | Fedora, openSUSE, RHEL… | [`Paint_x86_64.rpm`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_x86_64.rpm) | [`Paint_aarch64.rpm`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_aarch64.rpm) | `sudo dnf install ./Paint_x86_64.rpm` |
-| Arch, Manjaro, Gentoo, autres | [`Paint_linux_x86_64.tar.gz`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_linux_x86_64.tar.gz) | [`Paint_linux_aarch64.tar.gz`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_linux_aarch64.tar.gz) | `tar xzf Paint_linux_*.tar.gz && sudo Paint-*/install.sh` |
-| Sans installation | [`Paint_x86_64.AppImage`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_x86_64.AppImage) | [`Paint_aarch64.AppImage`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_aarch64.AppImage) | `chmod +x Paint_*.AppImage && ./Paint_*.AppImage` |
+| Arch, Manjaro, Gentoo, others | [`Paint_linux_x86_64.tar.gz`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_linux_x86_64.tar.gz) | [`Paint_linux_aarch64.tar.gz`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_linux_aarch64.tar.gz) | `tar xzf Paint_linux_*.tar.gz && sudo Paint-*/install.sh` |
+| No installation | [`Paint_x86_64.AppImage`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_x86_64.AppImage) | [`Paint_aarch64.AppImage`](https://github.com/GranNhom972/Painter/releases/latest/download/Paint_aarch64.AppImage) | `chmod +x Paint_*.AppImage && ./Paint_*.AppImage` |
 
-`uname -m` indique votre processeur. Les paquets sont construits sur Ubuntu 22.04 : ils s'installent
-aussi sur les distributions plus récentes. Paint apparaît dans le menu des applications avec son
-icône, et dans « Ouvrir avec » pour les images PNG, JPEG, BMP, GIF, TIFF, WEBP et ICO. L'archive
-s'installe aussi sans droits administrateur (`install.sh --user`) et se désinstalle avec
-`install.sh --uninstall`. Après une compilation locale (voir ci-dessous), les mêmes paquets sont dans
+`uname -m` tells you which processor you have. The packages are built on Ubuntu 22.04, so they also
+install on newer distributions. Paint shows up in the applications menu with its
+icon, and under "Open with" for PNG, JPEG, BMP, GIF, TIFF, WEBP and ICO images. The archive
+can also be installed without admin rights (`install.sh --user`) and uninstalled with
+`install.sh --uninstall`. After a local build (see below), the same packages are in
 `target/release/bundle/`.
 
-### Publier une version
+### Publishing a release
 
-1. Mettez le nouveau numéro dans `Cargo.toml`, `package.json` et `src-tauri/tauri.conf.json`, puis commitez.
-2. Poussez le tag correspondant :
+1. Put the new version number in `Cargo.toml`, `package.json` and `src-tauri/tauri.conf.json`, then commit.
+2. Push the matching tag:
 
    ```bash
    git tag v1.0.0
    git push origin v1.0.0
    ```
 
-GitHub Actions (`.github/workflows/release.yml`) teste le moteur, construit le .deb, le .rpm et
-l'AppImage, puis publie la Release avec leurs sommes de contrôle. Un tag qui ne correspond pas à la
-version est refusé. `scripts/release-linux.sh` produit les mêmes fichiers en local, dans `dist/`.
+GitHub Actions (`.github/workflows/release.yml`) tests the engine, builds the .deb, the .rpm and
+the AppImage, then publishes the Release with their checksums. A tag that doesn't match the
+version is rejected. `scripts/release-linux.sh` produces the same files locally, in `dist/`.
 
-## Compilation
+## Building
 
-Prérequis : Rust (cible `wasm32-unknown-unknown`), `wasm-pack`, Node.js.
-Les en-têtes WebKitGTK sont pris dans le système s'ils sont installés
-(`sudo apt install libwebkit2gtk-4.1-dev`). Sinon, `scripts/linux-devlibs.sh` les télécharge
-sans droits administrateur.
+Prerequisites: Rust (`wasm32-unknown-unknown` target), `wasm-pack`, Node.js.
+The WebKitGTK headers are taken from the system if installed
+(`sudo apt install libwebkit2gtk-4.1-dev`). Otherwise, `scripts/linux-devlibs.sh` downloads them
+without admin rights.
 
 ```bash
-scripts/build-linux.sh        # application + paquets .deb, .rpm, AppImage
-npm run dev                   # lance l'application de bureau en développement
-npm run build:wasm && npm run serve   # version navigateur sur http://127.0.0.1:4173
+scripts/build-linux.sh        # app + .deb, .rpm, AppImage packages
+npm run dev                   # runs the desktop app in development mode
+npm run build:wasm && npm run serve   # browser version at http://127.0.0.1:4173
 ```
 
-Sous Windows et macOS, `npm run build` produit les installateurs natifs (MSI/NSIS, DMG).
+On Windows and macOS, `npm run build` produces the native installers (MSI/NSIS, DMG).
 
 ## Tests
 
-| Suite | Commande | Contenu |
+| Suite | Command | Coverage |
 |---|---|---|
-| Moteur (Rust) | `cargo test -p paint-core` | 183 tests : chaque outil, chaque pinceau et chaque forme, toute la sélection, le presse-papiers, l'historique, les calques, les formats, et 26 tests de non-régression issus des audits |
-| Moteur en WebAssembly | `npm run test:wasm` | l'API compilée en WASM, exécutée dans Node |
-| Interface (navigateur) | `npm run build:wasm && npm run test:e2e` | 102 tests Playwright qui pilotent l'interface réelle : boutons, menus, raccourcis (clavier AZERTY compris), navigation au clavier, fenêtres étroites, tactile, sélection à la souris, presse-papiers système, fichiers, calques, Précédent/Suivant du navigateur, mode hors ligne |
-| Bureau (natif) | `cargo test -p paint` | fichiers (enregistrements simultanés, permissions, liens), ligne de commande, presse-papiers GTK contre un vrai serveur X (copier vers une autre application et coller depuis une autre application) |
-| Application de bureau | `scripts/test-desktop.sh` | 11 tests WebDriver sur l'application Tauri réelle (WebKitGTK) : barre de titre, souris (boutons Précédent/Suivant compris), clavier, presse-papiers natif, enregistrement et ouverture, format d'après l'extension, confirmation à la fermeture |
-| Image Docker | `scripts/test-docker.sh` | construit et démarre l'image avec Compose, vérifie qu'elle tourne sans root, en lecture seule, sans capacités et en bonne santé, puis passe les 102 tests Playwright contre le conteneur (types MIME, politique de sécurité du contenu, mode hors ligne compris) |
+| Engine (Rust) | `cargo test -p paint-core` | 183 tests: every tool, every brush and every shape, the whole selection system, clipboard, history, layers, formats, and 26 regression tests from audits |
+| Engine in WebAssembly | `npm run test:wasm` | the API compiled to WASM, run in Node |
+| Interface (browser) | `npm run build:wasm && npm run test:e2e` | 102 Playwright tests driving the real interface: buttons, menus, shortcuts (AZERTY keyboard included), keyboard navigation, narrow windows, touch, mouse selection, system clipboard, files, layers, browser Back/Forward, offline mode |
+| Desktop (native) | `cargo test -p paint` | files (concurrent saves, permissions, links), command line, GTK clipboard against a real X server (copy to another application and paste from another application) |
+| Desktop app | `scripts/test-desktop.sh` | 11 WebDriver tests on the real Tauri app (WebKitGTK): title bar, mouse (Back/Forward buttons included), keyboard, native clipboard, saving and opening, format from extension, confirmation on close |
+| Docker image | `scripts/test-docker.sh` | builds and starts the image with Compose, checks that it runs as non-root, read-only, with no capabilities and healthy, then runs the 102 Playwright tests against the container (MIME types, content security policy and offline mode included) |
 
-`./run --test` lance toutes ces suites (celles du bureau et de Docker quand les outils sont présents).
-`PAINT_URL=http://localhost:8088/ npx playwright test` vise un serveur déjà démarré. `cargo run --release -p paint-core --example bench` mesure les
-opérations interactives sur une image de 12 mégapixels.
+`./run --test` runs all these suites (desktop and Docker ones when the tools are available).
+`PAINT_URL=http://localhost:8088/ npx playwright test` targets an already running server. `cargo run --release -p paint-core --example bench` benchmarks
+interactive operations on a 12-megapixel image.
 
-## Limites
+## Limitations
 
-- Taille maximale d'une image : 16 384 pixels par côté et 64 mégapixels. Les opérations qui
-  dépasseraient ces limites sont refusées avec un message, au lieu de saturer la mémoire.
-- Version web : les navigateurs réservent Ctrl+N et Ctrl+W ; utilisez les menus
-  Fichier › Nouveau et Image › Redimensionner.
-- La zone de texte ne se déplace pas et ne fait pas de retour à la ligne automatique (Entrée
-  pour aller à la ligne).
+- Maximum image size: 16,384 pixels per side and 64 megapixels. Operations that
+  would exceed these limits are refused with a message instead of exhausting memory.
+- Web version: browsers reserve Ctrl+N and Ctrl+W; use the
+  File › New and Image › Resize menus instead.
+- The text box can't be moved and doesn't wrap automatically (press Enter
+  for a new line).
 
-Les tests du presse-papiers GTK et de l'application de bureau ont besoin d'un affichage :
-`DISPLAY` est utilisé s'il est défini, sinon `scripts/test-desktop.sh` démarre Xvfb.
+The GTK clipboard and desktop app tests need a display:
+`DISPLAY` is used if set, otherwise `scripts/test-desktop.sh` starts Xvfb.
 
-## Raccourcis
+## Keyboard shortcuts
 
-| Action | Raccourci |
+| Action | Shortcut |
 |---|---|
-| Nouveau / Ouvrir / Enregistrer | Ctrl+N / Ctrl+O / Ctrl+S |
-| Enregistrer sous (PNG) | F12, Ctrl+Maj+S |
-| Imprimer | Ctrl+P |
-| Propriétés de l'image | Ctrl+E |
-| Redimensionner et incliner | Ctrl+W |
-| Annuler / Rétablir | Ctrl+Z / Ctrl+Y (ou Ctrl+Maj+Z) |
-| Couper / Copier / Coller | Ctrl+X / Ctrl+C / Ctrl+V |
-| Sélectionner tout | Ctrl+A |
-| Supprimer la sélection | Suppr |
-| Rogner | Ctrl+Maj+X |
-| Déplacer la sélection | Flèches (Maj = 10 px) |
-| Valider / annuler (forme, sélection) | Entrée / Échap |
-| Zoom avant / arrière | Ctrl++ / Ctrl+-, Ctrl+molette |
-| 100 % / Ajuster à la fenêtre | Ctrl+1 / Ctrl+0 |
-| Règles / Quadrillage | Ctrl+R / Ctrl+G |
-| Nouveau calque | Ctrl+Maj+N |
-| Plein écran | F11 |
-| Texte : gras / italique / souligné, valider | Ctrl+B / Ctrl+I / Ctrl+U, Ctrl+Entrée |
+| New / Open / Save | Ctrl+N / Ctrl+O / Ctrl+S |
+| Save as (PNG) | F12, Ctrl+Shift+S |
+| Print | Ctrl+P |
+| Image properties | Ctrl+E |
+| Resize and skew | Ctrl+W |
+| Undo / Redo | Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z) |
+| Cut / Copy / Paste | Ctrl+X / Ctrl+C / Ctrl+V |
+| Select all | Ctrl+A |
+| Delete selection | Delete |
+| Crop | Ctrl+Shift+X |
+| Move selection | Arrow keys (Shift = 10 px) |
+| Commit / cancel (shape, selection) | Enter / Esc |
+| Zoom in / out | Ctrl++ / Ctrl+-, Ctrl+mouse wheel |
+| 100% / Fit to window | Ctrl+1 / Ctrl+0 |
+| Rulers / Gridlines | Ctrl+R / Ctrl+G |
+| New layer | Ctrl+Shift+N |
+| Full screen | F11 |
+| Text: bold / italic / underline, commit | Ctrl+B / Ctrl+I / Ctrl+U, Ctrl+Enter |
